@@ -1,18 +1,23 @@
 <template>
-  <div class="text-lg leading-6 font-medium text-main">
-    <i18n-t keypath="repository.gitops-status">
-      <template #status>
-        <span class="text-success"> {{ $t("common.enabled") }} </span>
-      </template>
-    </i18n-t>
+  <div class="flex justify-between">
+    <div class="text-lg leading-6 font-medium text-main">
+      <i18n-t keypath="repository.gitops-status">
+        <template #status>
+          <span class="text-success"> {{ $t("common.enabled") }} </span>
+        </template>
+      </i18n-t>
+    </div>
+    <TroubleshootLink
+      url="https://www.bytebase.com/docs/vcs-integration/troubleshoot/?source=console"
+    />
   </div>
   <div class="mt-2 textinfolabel">
     <template v-if="isProjectSchemaChangeTypeDDL">
       <i18n-t keypath="repository.gitops-description-file-path">
         <template #fullPath>
-          <a class="normal-link" :href="repository.webUrl" target="_blank">{{
-            repository.fullPath
-          }}</a>
+          <a class="normal-link" :href="repository.webUrl" target="_blank">
+            {{ repositoryFormattedFullPath }}
+          </a>
         </template>
         <template #fullPathTemplate>
           <span class="font-medium text-main"
@@ -50,7 +55,7 @@
       <i18n-t keypath="repository.gitops-description-sdl">
         <template #fullPath>
           <a class="normal-link" :href="repository.webUrl" target="_blank">
-            {{ repository.fullPath }}
+            {{ repositoryFormattedFullPath }}
           </a>
         </template>
         <template #branch>
@@ -203,9 +208,9 @@
             }}
           </template>
           <template #repository>
-            <a class="normal-link" :href="repository.webUrl" target="_blank">{{
-              repository.fullPath
-            }}</a>
+            <a class="normal-link" :href="repository.webUrl" target="_blank">
+              {{ repositoryFormattedFullPath }}
+            </a>
           </template>
         </i18n-t>
       </div>
@@ -238,9 +243,9 @@
             }}
           </template>
           <template #repository>
-            <a class="normal-link" :href="repository.webUrl" target="_blank">{{
-              repository.fullPath
-            }}</a>
+            <a class="normal-link" :href="repository.webUrl" target="_blank">
+              {{ repositoryFormattedFullPath }}
+            </a>
           </template>
         </i18n-t>
       </div>
@@ -356,6 +361,17 @@ watch(
     };
   }
 );
+
+const repositoryFormattedFullPath = computed(() => {
+  const fullPath = props.repository.fullPath;
+  if (props.vcs.type !== ExternalVersionControl_Type.AZURE_DEVOPS) {
+    return fullPath;
+  }
+  if (!fullPath.includes("@dev.azure.com")) {
+    return fullPath;
+  }
+  return `https://dev.azure.com${fullPath.split("@dev.azure.com")[1]}`;
+});
 
 const repositoryInfo = computed((): ExternalRepositoryInfo => {
   return {

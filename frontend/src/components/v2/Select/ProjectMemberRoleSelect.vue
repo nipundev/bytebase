@@ -46,6 +46,7 @@ const FREE_ROLE_LIST = [
   PresetRoleType.DEVELOPER,
   PresetRoleType.QUERIER,
   PresetRoleType.EXPORTER,
+  PresetRoleType.VIEWER,
 ];
 const hasCustomRoleFeature = featureToRef("bb.feature.custom-role");
 const showFeatureModal = ref(false);
@@ -105,9 +106,3 @@ const filterByName = (pattern: string, option: SelectOption) => {
   return role.name.toLowerCase().includes(pattern);
 };
 </script>
-
-<style lang="postcss" scoped>
-.bb-project-member-role-select :deep(.n-base-selection-input:focus) {
-  @apply !ring-0;
-}
-</style>

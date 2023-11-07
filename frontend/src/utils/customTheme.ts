@@ -1,20 +1,34 @@
 import { useLocalStorage } from "@vueuse/core";
 import { useI18n } from "vue-i18n";
+import { hexToRgb } from "./css";
 
-export const applyCustomTheme = (theme: string) => {
+export const customTheme = useLocalStorage<string>("bb.custom-theme", "");
+
+export const applyCustomTheme = () => {
   const rootElement = document.documentElement;
-  if (theme === "lixiang") {
-    rootElement.style.setProperty("--color-accent", "#00665f");
-    rootElement.style.setProperty("--color-accent-tw", "0 102 95");
-    rootElement.style.setProperty("--color-accent-disabled", "#b8c3c3");
-    rootElement.style.setProperty("--color-accent-hover", "#00554f");
+  if (customTheme.value === "lixiang") {
+    rootElement.style.setProperty(
+      "--color-accent",
+      hexToRgb("#00665f").join(" ")
+    );
+    rootElement.style.setProperty(
+      "--color-accent-disabled",
+      hexToRgb("#b8c3c3").join(" ")
+    );
+    rootElement.style.setProperty(
+      "--color-accent-hover",
+      hexToRgb("#00554f").join(" ")
+    );
+  } else {
+    rootElement.style.removeProperty("--color-accent");
+    rootElement.style.removeProperty("--color-accent-disabled");
+    rootElement.style.removeProperty("--color-accent-hover");
   }
 };
 
 export const getCustomProjectTitle = () => {
   const { t } = useI18n();
-  const theme = useLocalStorage<string>("bb.custom-theme", "");
-  if (theme.value === "lixiang") {
+  if (customTheme.value === "lixiang") {
     return t("common.tenant");
   }
   return t("common.project");

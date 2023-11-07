@@ -133,6 +133,46 @@ func (s *Store) GetWorkspaceExternalApprovalSetting(ctx context.Context) (*store
 	return payload, nil
 }
 
+// GetMaskingAlgorithmSetting gets the masking algorithm setting.
+func (s *Store) GetMaskingAlgorithmSetting(ctx context.Context) (*storepb.MaskingAlgorithmSetting, error) {
+	settingName := api.SettingMaskingAlgorithm
+	setting, err := s.GetSettingV2(ctx, &FindSettingMessage{
+		Name: &settingName,
+	})
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get setting %s", settingName)
+	}
+	if setting == nil {
+		return &storepb.MaskingAlgorithmSetting{}, nil
+	}
+
+	payload := new(storepb.MaskingAlgorithmSetting)
+	if err := protojson.Unmarshal([]byte(setting.Value), payload); err != nil {
+		return nil, err
+	}
+	return payload, nil
+}
+
+// GetSemanticTypesSetting gets the semantic types setting.
+func (s *Store) GetSemanticTypesSetting(ctx context.Context) (*storepb.SemanticTypeSetting, error) {
+	settingName := api.SettingSemanticTypes
+	setting, err := s.GetSettingV2(ctx, &FindSettingMessage{
+		Name: &settingName,
+	})
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get setting %s", settingName)
+	}
+	if setting == nil {
+		return &storepb.SemanticTypeSetting{}, nil
+	}
+
+	payload := new(storepb.SemanticTypeSetting)
+	if err := protojson.Unmarshal([]byte(setting.Value), payload); err != nil {
+		return nil, err
+	}
+	return payload, nil
+}
+
 // GetDataClassificationSetting gets the data classification setting.
 func (s *Store) GetDataClassificationSetting(ctx context.Context) (*storepb.DataClassificationSetting, error) {
 	settingName := api.SettingDataClassification
@@ -162,7 +202,9 @@ func (s *Store) DeleteCache() {
 func (s *Store) GetSettingV2(ctx context.Context, find *FindSettingMessage) (*SettingMessage, error) {
 	if find.Name != nil && !find.Enforce {
 		if setting, ok := s.settingCache.Load(*find.Name); ok {
-			return setting.(*SettingMessage), nil
+			if v, ok := setting.(*SettingMessage); ok {
+				return v, nil
+			}
 		}
 	}
 
@@ -256,7 +298,9 @@ func (s *Store) UpsertSettingV2(ctx context.Context, update *SetSettingMessage, 
 // CreateSettingIfNotExistV2 creates a new setting only if the named setting doesn't exist.
 func (s *Store) CreateSettingIfNotExistV2(ctx context.Context, create *SettingMessage, principalUID int) (*SettingMessage, bool, error) {
 	if setting, ok := s.settingCache.Load(create.Name); ok {
-		return setting.(*SettingMessage), false, nil
+		if v, ok := setting.(*SettingMessage); ok {
+			return v, false, nil
+		}
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)

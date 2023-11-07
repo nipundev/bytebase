@@ -20,7 +20,7 @@ import (
 	"github.com/bytebase/bytebase/backend/component/config"
 	"github.com/bytebase/bytebase/backend/component/dbfactory"
 	"github.com/bytebase/bytebase/backend/component/state"
-	enterpriseAPI "github.com/bytebase/bytebase/backend/enterprise/api"
+	enterprise "github.com/bytebase/bytebase/backend/enterprise/api"
 	api "github.com/bytebase/bytebase/backend/legacyapi"
 	"github.com/bytebase/bytebase/backend/store"
 	"github.com/bytebase/bytebase/backend/store/model"
@@ -35,7 +35,7 @@ const (
 )
 
 // NewSyncer creates a schema syncer.
-func NewSyncer(store *store.Store, dbFactory *dbfactory.DBFactory, stateCfg *state.State, profile config.Profile, licenseService enterpriseAPI.LicenseService) *Syncer {
+func NewSyncer(store *store.Store, dbFactory *dbfactory.DBFactory, stateCfg *state.State, profile config.Profile, licenseService enterprise.LicenseService) *Syncer {
 	return &Syncer{
 		store:          store,
 		dbFactory:      dbFactory,
@@ -51,7 +51,7 @@ type Syncer struct {
 	dbFactory      *dbfactory.DBFactory
 	stateCfg       *state.State
 	profile        config.Profile
-	licenseService enterpriseAPI.LicenseService
+	licenseService enterprise.LicenseService
 }
 
 // Run will run the schema syncer once.
@@ -64,9 +64,20 @@ func (s *Syncer) Run(ctx context.Context, wg *sync.WaitGroup) {
 		select {
 		case <-ticker.C:
 			s.trySyncAll(ctx)
-		case instance := <-s.stateCfg.InstanceDatabaseSyncChan:
-			// Sync all databases for instance.
-			s.syncAllDatabases(ctx, instance)
+		case <-s.stateCfg.InstanceSyncTickleChan:
+			s.stateCfg.InstanceSyncs.Range(func(key, value any) bool {
+				s.stateCfg.InstanceSyncs.Delete(key)
+				instance, ok := value.(*store.InstanceMessage)
+				if !ok {
+					return true
+				}
+				// Sync all databases for instance.
+				if err := s.SyncInstance(ctx, instance); err != nil {
+					slog.Error("failed to sync instance", log.BBError(err))
+				}
+				s.syncAllDatabases(ctx, instance)
+				return true
+			})
 		case <-ctx.Done(): // if cancel() execute
 			return
 		}
@@ -361,8 +372,7 @@ func (s *Syncer) SyncDatabaseSchema(ctx context.Context, database *store.Databas
 
 	var patchSchemaVersion *model.Version
 	if force {
-		// When there are too many databases, this might have performance issue and will
-		// cause frontend timeout since we set a 30s limit (INSTANCE_OPERATION_TIMEOUT).
+		// When there are too many databases, this might have performance issue.
 		schemaVersion, err := utils.GetLatestSchemaVersion(ctx, s.store, instance.UID, database.UID, databaseMetadata.Name)
 		if err != nil {
 			return err
@@ -392,8 +402,8 @@ func (s *Syncer) SyncDatabaseSchema(ctx context.Context, database *store.Databas
 	var oldDatabaseMetadata *storepb.DatabaseSchemaMetadata
 	var rawDump []byte
 	if dbSchema != nil {
-		oldDatabaseMetadata = dbSchema.Metadata
-		rawDump = dbSchema.Schema
+		oldDatabaseMetadata = dbSchema.GetMetadata()
+		rawDump = dbSchema.GetSchema()
 	}
 
 	if !cmp.Equal(oldDatabaseMetadata, databaseMetadata, protocmp.Transform()) {
@@ -407,10 +417,11 @@ func (s *Syncer) SyncDatabaseSchema(ctx context.Context, database *store.Databas
 			rawDump = schemaBuf.Bytes()
 		}
 
-		if err := s.store.UpsertDBSchema(ctx, database.UID, &store.DBSchema{
-			Metadata: databaseMetadata,
-			Schema:   rawDump,
-		}, api.SystemBotID); err != nil {
+		if err := s.store.UpsertDBSchema(ctx,
+			database.UID,
+			model.NewDBSchema(databaseMetadata, rawDump, nil /* config */),
+			api.SystemBotID,
+		); err != nil {
 			return err
 		}
 	}

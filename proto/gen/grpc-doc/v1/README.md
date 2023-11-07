@@ -150,6 +150,7 @@
     - [CreateBackupRequest](#bytebase-v1-CreateBackupRequest)
     - [Database](#bytebase-v1-Database)
     - [Database.LabelsEntry](#bytebase-v1-Database-LabelsEntry)
+    - [DatabaseConfig](#bytebase-v1-DatabaseConfig)
     - [DatabaseMetadata](#bytebase-v1-DatabaseMetadata)
     - [DatabaseSchema](#bytebase-v1-DatabaseSchema)
     - [DeleteSecretRequest](#bytebase-v1-DeleteSecretRequest)
@@ -201,6 +202,7 @@
     - [ChangeHistory.Status](#bytebase-v1-ChangeHistory-Status)
     - [ChangeHistory.Type](#bytebase-v1-ChangeHistory-Type)
     - [ChangeHistoryView](#bytebase-v1-ChangeHistoryView)
+    - [DatabaseMetadataView](#bytebase-v1-DatabaseMetadataView)
     - [StreamMetadata.Mode](#bytebase-v1-StreamMetadata-Mode)
     - [StreamMetadata.Type](#bytebase-v1-StreamMetadata-Type)
     - [TaskMetadata.State](#bytebase-v1-TaskMetadata-State)
@@ -474,6 +476,7 @@
     - [ListTaskRunsResponse](#bytebase-v1-ListTaskRunsResponse)
     - [Plan](#bytebase-v1-Plan)
     - [Plan.ChangeDatabaseConfig](#bytebase-v1-Plan-ChangeDatabaseConfig)
+    - [Plan.ChangeDatabaseConfig.GhostFlagsEntry](#bytebase-v1-Plan-ChangeDatabaseConfig-GhostFlagsEntry)
     - [Plan.ChangeDatabaseConfig.RollbackDetail](#bytebase-v1-Plan-ChangeDatabaseConfig-RollbackDetail)
     - [Plan.CreateDatabaseConfig](#bytebase-v1-Plan-CreateDatabaseConfig)
     - [Plan.CreateDatabaseConfig.LabelsEntry](#bytebase-v1-Plan-CreateDatabaseConfig-LabelsEntry)
@@ -600,13 +603,14 @@
     - [SearchSheetsResponse](#bytebase-v1-SearchSheetsResponse)
     - [Sheet](#bytebase-v1-Sheet)
     - [SheetOrganizer](#bytebase-v1-SheetOrganizer)
-    - [SyncSheetsRequest](#bytebase-v1-SyncSheetsRequest)
+    - [SheetPayload](#bytebase-v1-SheetPayload)
     - [UpdateSheetOrganizerRequest](#bytebase-v1-UpdateSheetOrganizerRequest)
     - [UpdateSheetRequest](#bytebase-v1-UpdateSheetRequest)
   
     - [Sheet.Source](#bytebase-v1-Sheet-Source)
     - [Sheet.Type](#bytebase-v1-Sheet-Type)
     - [Sheet.Visibility](#bytebase-v1-Sheet-Visibility)
+    - [SheetPayload.Type](#bytebase-v1-SheetPayload-Type)
   
     - [SheetService](#bytebase-v1-SheetService)
   
@@ -2738,6 +2742,22 @@ CreateBackupRequest is the request message for CreateBackup.
 
 
 
+<a name="bytebase-v1-DatabaseConfig"></a>
+
+### DatabaseConfig
+
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| name | [string](#string) |  |  |
+| schema_configs | [SchemaConfig](#bytebase-v1-SchemaConfig) | repeated | The schema_configs is the list of configs for schemas in a database. |
+
+
+
+
+
+
 <a name="bytebase-v1-DatabaseMetadata"></a>
 
 ### DatabaseMetadata
@@ -2937,6 +2957,8 @@ FunctionMetadata is the metadata for functions.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | name | [string](#string) |  | The name of the database to retrieve metadata. Format: instances/{instance}/databases/{database}/metadata |
+| view | [DatabaseMetadataView](#bytebase-v1-DatabaseMetadataView) |  | The view to return. Defaults to DATABASE_METADATA_VIEW_BASIC. |
+| filter | [string](#string) |  | The filter used for a specific schema object such as &#34;schemas/schema-a/tables/table-a&#34;. The column masking level will only be returned when a table filter is used. |
 
 
 
@@ -3277,8 +3299,8 @@ SlowQueryDetails is the details of the slow query log.
 | start_time | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  | The start time of the slow query log. |
 | query_time | [google.protobuf.Duration](#google-protobuf-Duration) |  | The query time of the slow query log. |
 | lock_time | [google.protobuf.Duration](#google-protobuf-Duration) |  | The lock time of the slow query log. |
-| rows_sent | [int64](#int64) |  | The rows sent of the slow query log. |
-| rows_examined | [int64](#int64) |  | The rows examined of the slow query log. |
+| rows_sent | [int32](#int32) |  | The rows sent of the slow query log. |
+| rows_examined | [int32](#int32) |  | The rows examined of the slow query log. |
 | sql_text | [string](#string) |  | The sql text of the slow query log. |
 
 
@@ -3312,14 +3334,14 @@ SlowQueryStatistics is the statistics of the slow query log.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | sql_fingerprint | [string](#string) |  | The fingerprint of the slow query log. |
-| count | [int64](#int64) |  | The count of the slow query log. |
+| count | [int32](#int32) |  | The count of the slow query log. |
 | latest_log_time | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  | The latest log time of the slow query log. |
 | average_query_time | [google.protobuf.Duration](#google-protobuf-Duration) |  | The average query time of the slow query log. |
 | maximum_query_time | [google.protobuf.Duration](#google-protobuf-Duration) |  | The maximum query time of the slow query log. |
-| average_rows_sent | [int64](#int64) |  | The average rows sent of the slow query log. |
-| maximum_rows_sent | [int64](#int64) |  | The maximum rows sent of the slow query log. |
-| average_rows_examined | [int64](#int64) |  | The average rows examined of the slow query log. |
-| maximum_rows_examined | [int64](#int64) |  | The maximum rows examined of the slow query log. |
+| average_rows_sent | [int32](#int32) |  | The average rows sent of the slow query log. |
+| maximum_rows_sent | [int32](#int32) |  | The maximum rows sent of the slow query log. |
+| average_rows_examined | [int32](#int32) |  | The average rows examined of the slow query log. |
+| maximum_rows_examined | [int32](#int32) |  | The maximum rows examined of the slow query log. |
 | query_time_percent | [double](#double) |  | The percentage of the query time. |
 | count_percent | [double](#double) |  | The percentage of the count. |
 | samples | [SlowQueryDetails](#bytebase-v1-SlowQueryDetails) | repeated | Samples are details of the sample slow query logs with the same fingerprint. |
@@ -3615,6 +3637,19 @@ The type of the backup.
 | CHANGE_HISTORY_VIEW_UNSPECIFIED | 0 | The default / unset value. The API will default to the BASIC view. |
 | CHANGE_HISTORY_VIEW_BASIC | 1 |  |
 | CHANGE_HISTORY_VIEW_FULL | 2 |  |
+
+
+
+<a name="bytebase-v1-DatabaseMetadataView"></a>
+
+### DatabaseMetadataView
+
+
+| Name | Number | Description |
+| ---- | ------ | ----------- |
+| DATABASE_METADATA_VIEW_UNSPECIFIED | 0 | The default and unset value. The API will default to the BASIC view. |
+| DATABASE_METADATA_VIEW_BASIC | 1 | Include basic information of schema object names such as schema, table, view, function names. |
+| DATABASE_METADATA_VIEW_FULL | 2 | Include everything such as columns and column masking level. |
 
 
 
@@ -6442,7 +6477,6 @@ When paginating, all other parameters provided to `ListSchemaGroups` must match 
 | workflow | [Workflow](#bytebase-v1-Workflow) |  |  |
 | visibility | [Visibility](#bytebase-v1-Visibility) |  |  |
 | tenant_mode | [TenantMode](#bytebase-v1-TenantMode) |  |  |
-| db_name_template | [string](#string) |  |  |
 | schema_change | [SchemaChange](#bytebase-v1-SchemaChange) |  |  |
 | webhooks | [Webhook](#bytebase-v1-Webhook) | repeated |  |
 | data_classification_config_id | [string](#string) |  |  |
@@ -7154,7 +7188,7 @@ When paginating, all other parameters provided to `LiskRisks` must match the cal
 | uid | [string](#string) |  | system-generated unique identifier. |
 | source | [Risk.Source](#bytebase-v1-Risk-Source) |  |  |
 | title | [string](#string) |  |  |
-| level | [int64](#int64) |  |  |
+| level | [int32](#int32) |  |  |
 | active | [bool](#bool) |  |  |
 | condition | [google.type.Expr](#google-type-Expr) |  |  |
 
@@ -7637,6 +7671,23 @@ When paginating, all other parameters provided to `ListRolloutTaskRuns` must mat
 | schema_version | [string](#string) |  | schema_version is parsed from VCS file name. It is automatically generated in the UI workflow. |
 | rollback_enabled | [bool](#bool) |  | If RollbackEnabled, build the RollbackSheetID of the task. |
 | rollback_detail | [Plan.ChangeDatabaseConfig.RollbackDetail](#bytebase-v1-Plan-ChangeDatabaseConfig-RollbackDetail) | optional |  |
+| ghost_flags | [Plan.ChangeDatabaseConfig.GhostFlagsEntry](#bytebase-v1-Plan-ChangeDatabaseConfig-GhostFlagsEntry) | repeated |  |
+
+
+
+
+
+
+<a name="bytebase-v1-Plan-ChangeDatabaseConfig-GhostFlagsEntry"></a>
+
+### Plan.ChangeDatabaseConfig.GhostFlagsEntry
+
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| key | [string](#string) |  |  |
+| value | [string](#string) |  |  |
 
 
 
@@ -7764,6 +7815,7 @@ When paginating, all other parameters provided to `ListRolloutTaskRuns` must mat
 | type | [PlanCheckRun.Type](#bytebase-v1-PlanCheckRun-Type) |  |  |
 | status | [PlanCheckRun.Status](#bytebase-v1-PlanCheckRun-Status) |  |  |
 | target | [string](#string) |  | Format: instances/{instance}/databases/{database} |
+| sheet | [string](#string) |  | Format: project/{project}/sheets/{sheet} |
 | results | [PlanCheckRun.Result](#bytebase-v1-PlanCheckRun-Result) | repeated |  |
 | error | [string](#string) |  | error is set if the Status is FAILED. |
 | create_time | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  |
@@ -7784,7 +7836,7 @@ When paginating, all other parameters provided to `ListRolloutTaskRuns` must mat
 | status | [PlanCheckRun.Result.Status](#bytebase-v1-PlanCheckRun-Result-Status) |  |  |
 | title | [string](#string) |  |  |
 | content | [string](#string) |  |  |
-| code | [int64](#int64) |  |  |
+| code | [int32](#int32) |  |  |
 | sql_summary_report | [PlanCheckRun.Result.SqlSummaryReport](#bytebase-v1-PlanCheckRun-Result-SqlSummaryReport) |  |  |
 | sql_review_report | [PlanCheckRun.Result.SqlReviewReport](#bytebase-v1-PlanCheckRun-Result-SqlReviewReport) |  |  |
 
@@ -7801,10 +7853,10 @@ When paginating, all other parameters provided to `ListRolloutTaskRuns` must mat
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| line | [int64](#int64) |  |  |
-| column | [int64](#int64) |  |  |
+| line | [int32](#int32) |  |  |
+| column | [int32](#int32) |  |  |
 | detail | [string](#string) |  |  |
-| code | [int64](#int64) |  | Code from sql review. |
+| code | [int32](#int32) |  | Code from sql review. |
 
 
 
@@ -7819,9 +7871,9 @@ When paginating, all other parameters provided to `ListRolloutTaskRuns` must mat
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| code | [int64](#int64) |  |  |
+| code | [int32](#int32) |  |  |
 | statement_types | [string](#string) | repeated | statement_types are the types of statements that are found in the sql. |
-| affected_rows | [int64](#int64) |  |  |
+| affected_rows | [int32](#int32) |  |  |
 | changed_resources | [ChangedResources](#bytebase-v1-ChangedResources) |  |  |
 
 
@@ -9044,7 +9096,7 @@ When paginating, all other parameters provided to `ListSettings` must match the 
 | id | [string](#string) |  | id is the uuid for masking algorithm. |
 | title | [string](#string) |  | title is the title for masking algorithm. |
 | description | [string](#string) |  | description is the description for masking algorithm. |
-| category | [string](#string) |  | Category is the category for masking algorithm. Currently, it accepts 2 categories only: MASKING and HASHING. The range of accepted Payload is decided by the category. Mask: FullMask, RangeMask Hash: MD5Mask |
+| category | [string](#string) |  | Category is the category for masking algorithm. Currently, it accepts 2 categories only: MASK and HASH. The range of accepted Payload is decided by the category. MASK: FullMask, RangeMask HASH: MD5Mask |
 | full_mask | [MaskingAlgorithmSetting.Algorithm.FullMask](#bytebase-v1-MaskingAlgorithmSetting-Algorithm-FullMask) |  |  |
 | range_mask | [MaskingAlgorithmSetting.Algorithm.RangeMask](#bytebase-v1-MaskingAlgorithmSetting-Algorithm-RangeMask) |  |  |
 | md5_mask | [MaskingAlgorithmSetting.Algorithm.MD5Mask](#bytebase-v1-MaskingAlgorithmSetting-Algorithm-MD5Mask) |  |  |
@@ -9109,7 +9161,7 @@ When paginating, all other parameters provided to `ListSettings` must match the 
 | ----- | ---- | ----- | ----------- |
 | start | [int32](#int32) |  | start is the start index of the original value, start from 0 and should be less than stop. |
 | end | [int32](#int32) |  | stop is the stop index of the original value, should be less than the length of the original value. |
-| substitution | [string](#string) |  | OriginalValue[start:end) would be replaced with replace_with. |
+| substitution | [string](#string) |  | substitution is the string used to replace the OriginalValue[start:end). |
 
 
 
@@ -9567,7 +9619,7 @@ When paginating, all other parameters provided to `SearchSheets` must match the 
 | source | [Sheet.Source](#bytebase-v1-Sheet-Source) |  | The source of the sheet. |
 | type | [Sheet.Type](#bytebase-v1-Sheet-Type) |  | The type of the sheet. |
 | starred | [bool](#bool) |  | starred indicates whether the sheet is starred by the current authenticated user. |
-| payload | [string](#string) |  | TODO: deprecate this field. |
+| payload | [SheetPayload](#bytebase-v1-SheetPayload) |  |  |
 | push_event | [PushEvent](#bytebase-v1-PushEvent) |  |  |
 
 
@@ -9592,17 +9644,17 @@ When paginating, all other parameters provided to `SearchSheets` must match the 
 
 
 
-<a name="bytebase-v1-SyncSheetsRequest"></a>
+<a name="bytebase-v1-SheetPayload"></a>
 
-### SyncSheetsRequest
+### SheetPayload
 
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| parent | [string](#string) |  | The name of the project to sync sheets.
-
-Format: projects/{project} |
+| type | [SheetPayload.Type](#bytebase-v1-SheetPayload-Type) |  |  |
+| database_config | [DatabaseConfig](#bytebase-v1-DatabaseConfig) |  | The snapshot of the database config when creating the sheet, be used to compare with the baseline_database_config and apply the diff to the database. |
+| baseline_database_config | [DatabaseConfig](#bytebase-v1-DatabaseConfig) |  | The snapshot of the baseline database config when creating the sheet. |
 
 
 
@@ -9655,11 +9707,8 @@ The sheet&#39;s `name` field is used to identify the sheet to update. Format: pr
 | Name | Number | Description |
 | ---- | ------ | ----------- |
 | SOURCE_UNSPECIFIED | 0 |  |
-| SOURCE_BYTEBASE | 1 | BYTEBASE is the sheet created by Bytebase. e.g. SQL Editor. |
-| SOURCE_BYTEBASE_ARTIFACT | 2 | BYTEBASE_ARTIFACT is the artifact sheet. |
-| SOURCE_GITLAB | 3 | GITLAB is the sheet synced from GitLab (for both GitLab.com and self-hosted GitLab). |
-| SOURCE_GITHUB | 4 | GITHUB is the sheet synced from GitHub (for both GitHub.com and GitHub Enterprise). |
-| SOURCE_BITBUCKET | 5 | BITBUCKET is the sheet synced from Bitbucket (for both Bitbucket.org and Bitbucket Server). |
+| SOURCE_BYTEBASE | 1 | BYTEBASE is the sheet created in SQL Editor. |
+| SOURCE_BYTEBASE_ARTIFACT | 2 | BYTEBASE_ARTIFACT is the artifact sheet such as DDL/DML. |
 
 
 
@@ -9688,6 +9737,18 @@ The sheet&#39;s `name` field is used to identify the sheet to update. Format: pr
 | VISIBILITY_PRIVATE | 3 | Private, only sheet OWNER can read/write. |
 
 
+
+<a name="bytebase-v1-SheetPayload-Type"></a>
+
+### SheetPayload.Type
+Type of the SheetPayload.
+
+| Name | Number | Description |
+| ---- | ------ | ----------- |
+| TYPE_UNSPECIFIED | 0 |  |
+| SCHEMA_DESIGN | 1 |  |
+
+
  
 
  
@@ -9706,7 +9767,6 @@ The sheet&#39;s `name` field is used to identify the sheet to update. Format: pr
 | UpdateSheet | [UpdateSheetRequest](#bytebase-v1-UpdateSheetRequest) | [Sheet](#bytebase-v1-Sheet) |  |
 | UpdateSheetOrganizer | [UpdateSheetOrganizerRequest](#bytebase-v1-UpdateSheetOrganizerRequest) | [SheetOrganizer](#bytebase-v1-SheetOrganizer) |  |
 | DeleteSheet | [DeleteSheetRequest](#bytebase-v1-DeleteSheetRequest) | [.google.protobuf.Empty](#google-protobuf-Empty) |  |
-| SyncSheets | [SyncSheetsRequest](#bytebase-v1-SyncSheetsRequest) | [.google.protobuf.Empty](#google-protobuf-Empty) |  |
 
  
 

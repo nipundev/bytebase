@@ -105,9 +105,7 @@
   <template v-else-if="viewMode === 'AFFECTED-ROWS'">
     <div
       class="text-md font-normal flex items-center gap-x-1"
-      :class="[
-        dark ? 'text-[var(--color-matrix-green-hover)]' : 'text-control-light',
-      ]"
+      :class="[dark ? 'text-matrix-green-hover' : 'text-control-light']"
     >
       <span>{{ extractSQLRowValue(result.rows[0].values[0]) }}</span>
       <span>rows affected</span>
@@ -392,7 +390,7 @@ const queryTime = computed(() => {
   if (!latency) return "-";
 
   const { seconds, nanos } = latency;
-  const totalSeconds = seconds + nanos / 1e9;
+  const totalSeconds = seconds.toNumber() + nanos / 1e9;
   if (totalSeconds < 1) {
     const totalMS = Math.round(totalSeconds * 1000);
     return `${totalMS} ms`;

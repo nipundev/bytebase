@@ -1,4 +1,7 @@
 <template>
+  <div v-if="quickActionList.length > 0" class="flex-1 pb-2">
+    <QuickActionPanel :quick-action-list="quickActionList" />
+  </div>
   <template v-if="hash === 'issues'">
     <ProjectIssuesPanel id="issues" :project="project" />
   </template>
@@ -63,7 +66,10 @@
 </template>
 
 <script lang="ts" setup>
-import { computed } from "vue";
+import { useLocalStorage } from "@vueuse/core";
+import { pull } from "lodash-es";
+import { computed, onMounted } from "vue";
+import { useI18n } from "vue-i18n";
 import { useRoute } from "vue-router";
 import AnomalyCenterDashboard from "@/components/AnomalyCenter/AnomalyCenterDashboard.vue";
 import ChangelistDashboard from "@/components/Changelist/ChangelistDashboard";
@@ -84,9 +90,28 @@ import {
   useSearchDatabaseV1List,
   useDatabaseV1Store,
   useProjectV1Store,
+  useCurrentUserV1,
+  useActivityV1Store,
+  hasFeature,
+  pushNotification,
 } from "@/store";
-import { DEFAULT_PROJECT_V1_NAME } from "@/types";
-import { idFromSlug, sortDatabaseV1List } from "@/utils";
+import {
+  QuickActionType,
+  DEFAULT_PROJECT_V1_NAME,
+  RoleType,
+  activityName,
+} from "@/types";
+import { State } from "@/types/proto/v1/common";
+import { LogEntity_Action } from "@/types/proto/v1/logging_service";
+import {
+  idFromSlug,
+  projectV1Slug,
+  sortDatabaseV1List,
+  isOwnerOfProjectV1,
+  hasPermissionInProjectV1,
+  hasWorkspacePermissionV1,
+  getQuickActionList,
+} from "@/utils";
 
 const props = defineProps({
   projectWebhookSlug: {
@@ -105,6 +130,8 @@ const props = defineProps({
 
 const route = useRoute();
 const projectV1Store = useProjectV1Store();
+const activityV1Store = useActivityV1Store();
+const { t } = useI18n();
 
 const hash = computed(() => route.hash.replace(/^#?/, "") as ProjectHash);
 
@@ -126,5 +153,130 @@ useSearchDatabaseV1List(
 const databaseV1List = computed(() => {
   const list = useDatabaseV1Store().databaseListByProject(project.value.name);
   return sortDatabaseV1List(list);
+});
+
+const cachedNotifiedActivities = useLocalStorage<string[]>(
+  `bb.project.${props.projectSlug}.activities`,
+  []
+);
+
+const maximumCachedActivities = 5;
+
+onMounted(() => {
+  const currentUserV1 = useCurrentUserV1();
+
+  if (
+    !hasWorkspacePermissionV1(
+      "bb.permission.workspace.manage-issue",
+      currentUserV1.value.userRole
+    ) &&
+    !hasPermissionInProjectV1(
+      project.value.iamPolicy,
+      currentUserV1.value,
+      "bb.permission.project.change-database"
+    )
+  ) {
+    return;
+  }
+  activityV1Store
+    .fetchActivityList({
+      pageSize: 1,
+      order: "desc",
+      action: [LogEntity_Action.ACTION_PROJECT_REPOSITORY_PUSH],
+      resource: project.value.name,
+    })
+    .then((resp) => {
+      for (const activity of resp.logEntities) {
+        if (cachedNotifiedActivities.value.includes(activity.name)) {
+          continue;
+        }
+        cachedNotifiedActivities.value.push(activity.name);
+        if (cachedNotifiedActivities.value.length > maximumCachedActivities) {
+          cachedNotifiedActivities.value.shift();
+        }
+
+        pushNotification({
+          module: "bytebase",
+          style: "INFO",
+          title: activityName(activity.action),
+          manualHide: true,
+          link: `/project/${projectV1Slug(project.value)}#activities`,
+          linkTitle: t("common.view"),
+        });
+        break;
+      }
+    });
+});
+
+const quickActionMapByRole = computed(() => {
+  if (project.value.state === State.ACTIVE) {
+    const DBA_AND_OWNER_QUICK_ACTION_LIST: QuickActionType[] = [
+      "quickaction.bb.database.schema.update",
+      "quickaction.bb.database.data.update",
+      "quickaction.bb.database.create",
+      "quickaction.bb.project.database.transfer",
+      "quickaction.bb.project.database.transfer-out",
+    ];
+    const DEVELOPER_QUICK_ACTION_LIST: QuickActionType[] = [];
+
+    const currentUserV1 = useCurrentUserV1();
+    if (
+      project.value.name !== DEFAULT_PROJECT_V1_NAME &&
+      hasPermissionInProjectV1(
+        project.value.iamPolicy,
+        currentUserV1.value,
+        "bb.permission.project.change-database"
+      )
+    ) {
+      // Default project (Unassigned databases) are not allowed
+      // to be changed.
+      DEVELOPER_QUICK_ACTION_LIST.push(
+        "quickaction.bb.database.schema.update",
+        "quickaction.bb.database.data.update",
+        "quickaction.bb.database.create"
+      );
+    }
+    if (
+      hasPermissionInProjectV1(
+        project.value.iamPolicy,
+        currentUserV1.value,
+        "bb.permission.project.transfer-database"
+      )
+    ) {
+      DEVELOPER_QUICK_ACTION_LIST.push(
+        "quickaction.bb.project.database.transfer",
+        "quickaction.bb.project.database.transfer-out"
+      );
+    }
+    if (!isOwnerOfProjectV1(project.value.iamPolicy, currentUserV1.value)) {
+      DEVELOPER_QUICK_ACTION_LIST.push(
+        "quickaction.bb.issue.grant.request.querier",
+        "quickaction.bb.issue.grant.request.exporter"
+      );
+    }
+
+    if (hasFeature("bb.feature.dba-workflow")) {
+      pull(DEVELOPER_QUICK_ACTION_LIST, "quickaction.bb.database.create");
+    }
+
+    return new Map([
+      ["OWNER", DBA_AND_OWNER_QUICK_ACTION_LIST],
+      ["DBA", DBA_AND_OWNER_QUICK_ACTION_LIST],
+      ["DEVELOPER", DEVELOPER_QUICK_ACTION_LIST],
+    ]) as Map<RoleType, QuickActionType[]>;
+  }
+
+  return new Map<RoleType, QuickActionType[]>();
+});
+
+const isDatabaseHash = computed(() => {
+  return hash.value === "databases" || hash.value === "database-groups";
+});
+
+const quickActionList = computed(() => {
+  if (!isDatabaseHash.value) {
+    return [];
+  }
+  return getQuickActionList(quickActionMapByRole.value);
 });
 </script>

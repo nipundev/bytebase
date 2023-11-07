@@ -29,7 +29,7 @@ import (
 	"github.com/bytebase/bytebase/backend/common"
 	"github.com/bytebase/bytebase/backend/common/log"
 	"github.com/bytebase/bytebase/backend/component/config"
-	enterpriseAPI "github.com/bytebase/bytebase/backend/enterprise/api"
+	enterprise "github.com/bytebase/bytebase/backend/enterprise/api"
 	api "github.com/bytebase/bytebase/backend/legacyapi"
 	"github.com/bytebase/bytebase/backend/plugin/db"
 	"github.com/bytebase/bytebase/backend/plugin/parser/base"
@@ -39,6 +39,7 @@ import (
 	"github.com/bytebase/bytebase/backend/runner/backuprun"
 	"github.com/bytebase/bytebase/backend/runner/schemasync"
 	"github.com/bytebase/bytebase/backend/store"
+	"github.com/bytebase/bytebase/backend/store/model"
 	storepb "github.com/bytebase/bytebase/proto/generated-go/store"
 	v1pb "github.com/bytebase/bytebase/proto/generated-go/v1"
 )
@@ -66,12 +67,12 @@ type DatabaseService struct {
 	store          *store.Store
 	backupRunner   *backuprun.Runner
 	schemaSyncer   *schemasync.Syncer
-	licenseService enterpriseAPI.LicenseService
+	licenseService enterprise.LicenseService
 	profile        *config.Profile
 }
 
 // NewDatabaseService creates a new DatabaseService.
-func NewDatabaseService(store *store.Store, br *backuprun.Runner, schemaSyncer *schemasync.Syncer, licenseService enterpriseAPI.LicenseService, profile *config.Profile) *DatabaseService {
+func NewDatabaseService(store *store.Store, br *backuprun.Runner, schemaSyncer *schemasync.Syncer, licenseService enterprise.LicenseService, profile *config.Profile) *DatabaseService {
 	return &DatabaseService{
 		store:          store,
 		backupRunner:   br,
@@ -292,7 +293,10 @@ func (s *DatabaseService) UpdateDatabase(ctx context.Context, request *v1pb.Upda
 		}
 	}
 
-	principalID := ctx.Value(common.PrincipalIDContextKey).(int)
+	principalID, ok := ctx.Value(common.PrincipalIDContextKey).(int)
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "principal ID not found")
+	}
 	updatedDatabase, err := s.store.UpdateDatabase(ctx, patch, principalID)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, err.Error())
@@ -409,7 +413,10 @@ func (s *DatabaseService) BatchUpdateDatabases(ctx context.Context, request *v1p
 	}
 
 	response := &v1pb.BatchUpdateDatabasesResponse{}
-	principalID := ctx.Value(common.PrincipalIDContextKey).(int)
+	principalID, ok := ctx.Value(common.PrincipalIDContextKey).(int)
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "principal ID not found")
+	}
 	if len(databases) > 0 {
 		updatedDatabases, err := s.store.BatchUpdateDatabaseProject(ctx, databases, project.ResourceID, principalID)
 		if err != nil {
@@ -476,45 +483,63 @@ func (s *DatabaseService) GetDatabaseMetadata(ctx context.Context, request *v1pb
 		dbSchema = newDBSchema
 	}
 
-	v1pbMetadata := convertDatabaseMetadata(database, dbSchema.Metadata, dbSchema.Config)
-	// backfill the effective masking level.
-	dataClassificationSetting, err := s.store.GetDataClassificationSetting(ctx)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to get data classification setting, error: %v", err)
-	}
-	maskingRulePolicy, err := s.store.GetMaskingRulePolicy(ctx)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to get masking rule policy, error: %v", err)
-	}
-	// Convert the maskingPolicy to a map to reduce the time complexity of searching.
-	maskingPolicy, err := s.store.GetMaskingPolicyByDatabaseUID(ctx, database.UID)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to find masking policy for database %q", databaseName)
-	}
-	maskingPolicyMap := make(map[maskingPolicyKey]*storepb.MaskData)
-	if maskingPolicy != nil {
-		for _, maskData := range maskingPolicy.MaskData {
-			maskingPolicyMap[maskingPolicyKey{
-				schema: maskData.Schema,
-				table:  maskData.Table,
-				column: maskData.Column,
-			}] = maskData
+	var filter *metadataFilter
+	if request.Filter != "" {
+		schema, table, err := common.GetSchemaTableName(request.Filter)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid filter %q", filter)
 		}
+		filter = &metadataFilter{schema: schema, table: table}
 	}
+	v1pbMetadata := convertDatabaseMetadata(database, dbSchema.GetMetadata(), dbSchema.GetConfig(), request.View, filter)
 
-	evaluator := newEmptyMaskingLevelEvaluator().withDataClassificationSetting(dataClassificationSetting).withMaskingRulePolicy(maskingRulePolicy)
-	for _, schema := range v1pbMetadata.Schemas {
-		for _, table := range schema.Tables {
-			for _, column := range table.Columns {
-				maskingLevel, err := evaluator.evaluateMaskingLevelOfColumn(database, schema.Name, table.Name, column.Name, column.Classification, project.DataClassificationConfigID, maskingPolicyMap, nil /* Exceptions*/)
-				if err != nil {
-					return nil, status.Errorf(codes.Internal, "failed to evaluate masking level of column %q, error: %v", column.Name, err)
+	// Set effective masking level only if filter is set for a table.
+	if filter != nil && request.View == v1pb.DatabaseMetadataView_DATABASE_METADATA_VIEW_FULL {
+		dataClassificationSetting, err := s.store.GetDataClassificationSetting(ctx)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to get data classification setting, error: %v", err)
+		}
+		maskingRulePolicy, err := s.store.GetMaskingRulePolicy(ctx)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to get masking rule policy, error: %v", err)
+		}
+		// Convert the maskingPolicy to a map to reduce the time complexity of searching.
+		maskingPolicy, err := s.store.GetMaskingPolicyByDatabaseUID(ctx, database.UID)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to find masking policy for database %q", databaseName)
+		}
+		maskingPolicyMap := make(map[maskingPolicyKey]*storepb.MaskData)
+		if maskingPolicy != nil {
+			for _, maskData := range maskingPolicy.MaskData {
+				maskingPolicyMap[maskingPolicyKey{
+					schema: maskData.Schema,
+					table:  maskData.Table,
+					column: maskData.Column,
+				}] = maskData
+			}
+		}
+
+		evaluator := newEmptyMaskingLevelEvaluator().withDataClassificationSetting(dataClassificationSetting).withMaskingRulePolicy(maskingRulePolicy)
+		for _, schema := range v1pbMetadata.Schemas {
+			if filter.schema != schema.Name {
+				continue
+			}
+			for _, table := range schema.Tables {
+				if filter.table != table.Name {
+					continue
 				}
-				v1pbMaskingLevel := convertToV1PBMaskingLevel(maskingLevel)
-				column.EffectiveMaskingLevel = v1pbMaskingLevel
+				for _, column := range table.Columns {
+					maskingLevel, err := evaluator.evaluateMaskingLevelOfColumn(database, schema.Name, table.Name, column.Name, column.Classification, project.DataClassificationConfigID, maskingPolicyMap, nil /* Exceptions*/)
+					if err != nil {
+						return nil, status.Errorf(codes.Internal, "failed to evaluate masking level of column %q, error: %v", column.Name, err)
+					}
+					v1pbMaskingLevel := convertToV1PBMaskingLevel(maskingLevel)
+					column.EffectiveMaskingLevel = v1pbMaskingLevel
+				}
 			}
 		}
 	}
+
 	return v1pbMetadata, nil
 }
 
@@ -527,7 +552,10 @@ func (s *DatabaseService) UpdateDatabaseMetadata(ctx context.Context, request *v
 		return nil, status.Errorf(codes.InvalidArgument, "update_mask must be set")
 	}
 
-	principalID := ctx.Value(common.PrincipalIDContextKey).(int)
+	principalID, ok := ctx.Value(common.PrincipalIDContextKey).(int)
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "principal ID not found")
+	}
 	instanceID, databaseName, err := common.TrimSuffixAndGetInstanceDatabaseID(request.DatabaseMetadata.Name, common.MetadataSuffix)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, err.Error())
@@ -566,7 +594,10 @@ func (s *DatabaseService) UpdateDatabaseMetadata(ctx context.Context, request *v
 
 	for _, path := range request.UpdateMask.Paths {
 		if path == "schema_configs" {
-			databaseConfig := convertV1DatabaseConfig(databaseName, request.DatabaseMetadata.SchemaConfigs)
+			databaseConfig := convertV1DatabaseConfig(&v1pb.DatabaseConfig{
+				Name:          databaseName,
+				SchemaConfigs: request.DatabaseMetadata.SchemaConfigs,
+			})
 			if err := s.store.UpdateDBSchema(ctx, database.UID, &store.UpdateDBSchemaMessage{Config: databaseConfig}, principalID); err != nil {
 				return nil, err
 			}
@@ -581,7 +612,7 @@ func (s *DatabaseService) UpdateDatabaseMetadata(ctx context.Context, request *v
 		return nil, status.Errorf(codes.NotFound, "database schema %q not found", databaseName)
 	}
 
-	v1pbMetadata := convertDatabaseMetadata(database, dbSchema.Metadata, dbSchema.Config)
+	v1pbMetadata := convertDatabaseMetadata(database, dbSchema.GetMetadata(), dbSchema.GetConfig(), v1pb.DatabaseMetadataView_DATABASE_METADATA_VIEW_BASIC, nil /* filter */)
 	return v1pbMetadata, nil
 }
 
@@ -630,7 +661,7 @@ func (s *DatabaseService) GetDatabaseSchema(ctx context.Context, request *v1pb.G
 		dbSchema = newDBSchema
 	}
 	// We only support MySQL engine for now.
-	schema := string(dbSchema.Schema)
+	schema := string(dbSchema.GetSchema())
 	if request.SdlFormat {
 		switch instance.Engine {
 		case storepb.Engine_MYSQL, storepb.Engine_TIDB, storepb.Engine_MARIADB, storepb.Engine_OCEANBASE:
@@ -717,7 +748,10 @@ func (s *DatabaseService) UpdateBackupSetting(ctx context.Context, request *v1pb
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
-	principalID := ctx.Value(common.PrincipalIDContextKey).(int)
+	principalID, ok := ctx.Value(common.PrincipalIDContextKey).(int)
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "principal ID not found")
+	}
 	backupSetting, err = s.store.UpsertBackupSettingV2(ctx, principalID, backupSetting)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, err.Error())
@@ -814,7 +848,10 @@ func (s *DatabaseService) CreateBackup(ctx context.Context, request *v1pb.Create
 		return nil, status.Errorf(codes.AlreadyExists, "backup %q in database %q already exists", backupName, databaseName)
 	}
 
-	creatorID := ctx.Value(common.PrincipalIDContextKey).(int)
+	creatorID, ok := ctx.Value(common.PrincipalIDContextKey).(int)
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "principal ID not found")
+	}
 	backup, err := s.backupRunner.ScheduleBackupTask(ctx, database, backupName, api.BackupTypeManual, creatorID)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, err.Error())
@@ -1433,7 +1470,10 @@ func (s *DatabaseService) UpdateSecret(ctx context.Context, request *v1pb.Update
 	}
 	updateDatabaseMessage.InstanceID = database.InstanceID
 	updateDatabaseMessage.DatabaseName = database.DatabaseName
-	principalID := ctx.Value(common.PrincipalIDContextKey).(int)
+	principalID, ok := ctx.Value(common.PrincipalIDContextKey).(int)
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "principal ID not found")
+	}
 	updatedDatabase, err := s.store.UpdateDatabase(ctx, &updateDatabaseMessage, principalID)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, err.Error())
@@ -1506,7 +1546,10 @@ func (s *DatabaseService) DeleteSecret(ctx context.Context, request *v1pb.Delete
 	}
 	updateDatabaseMessage.InstanceID = database.InstanceID
 	updateDatabaseMessage.DatabaseName = database.DatabaseName
-	principalID := ctx.Value(common.PrincipalIDContextKey).(int)
+	principalID, ok := ctx.Value(common.PrincipalIDContextKey).(int)
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "principal ID not found")
+	}
 	if _, err := s.store.UpdateDatabase(ctx, &updateDatabaseMessage, principalID); err != nil {
 		return nil, status.Errorf(codes.Internal, err.Error())
 	}
@@ -1515,12 +1558,18 @@ func (s *DatabaseService) DeleteSecret(ctx context.Context, request *v1pb.Delete
 }
 
 func (s *DatabaseService) checkDatabasePermission(ctx context.Context, projectID string, permission api.ProjectPermissionType) error {
-	role := ctx.Value(common.RoleContextKey).(api.Role)
+	role, ok := ctx.Value(common.RoleContextKey).(api.Role)
+	if !ok {
+		return status.Errorf(codes.Internal, "role not found")
+	}
 	if isOwnerOrDBA(role) {
 		return nil
 	}
 
-	principalID := ctx.Value(common.PrincipalIDContextKey).(int)
+	principalID, ok := ctx.Value(common.PrincipalIDContextKey).(int)
+	if !ok {
+		return status.Errorf(codes.Internal, "principal ID not found")
+	}
 	policy, err := s.store.GetProjectPolicy(ctx, &store.GetProjectPolicyMessage{ProjectID: &projectID})
 	if err != nil {
 		return status.Errorf(codes.Internal, err.Error())
@@ -1536,7 +1585,7 @@ func (s *DatabaseService) checkDatabasePermission(ctx context.Context, projectID
 	projectRoles := make(map[common.ProjectRole]bool)
 	for _, binding := range policy.Bindings {
 		for _, member := range binding.Members {
-			if member.ID == principalID {
+			if member.ID == principalID || member.Email == api.AllUsers {
 				projectRoles[common.ProjectRole(binding.Role)] = true
 				break
 			}
@@ -1552,7 +1601,7 @@ func (s *DatabaseService) checkDatabasePermission(ctx context.Context, projectID
 
 type totalValue struct {
 	totalQueryTime time.Duration
-	totalCount     int64
+	totalCount     int32
 }
 
 // ListSlowQueries lists the slow queries.
@@ -1664,7 +1713,10 @@ func (s *DatabaseService) ListSlowQueries(ctx context.Context, request *v1pb.Lis
 
 	var canAccessDBs []*store.DatabaseMessage
 
-	principalID := ctx.Value(common.PrincipalIDContextKey).(int)
+	principalID, ok := ctx.Value(common.PrincipalIDContextKey).(int)
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "principal ID not found")
+	}
 	user, err := s.store.GetUserByID(ctx, principalID)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to find user %q", err.Error())
@@ -1921,67 +1973,95 @@ func convertToDatabase(database *store.DatabaseMessage) *v1pb.Database {
 	}
 }
 
-func convertDatabaseMetadata(database *store.DatabaseMessage, metadata *storepb.DatabaseSchemaMetadata, config *storepb.DatabaseConfig) *v1pb.DatabaseMetadata {
+type metadataFilter struct {
+	schema string
+	table  string
+}
+
+func convertDatabaseMetadata(database *store.DatabaseMessage, metadata *storepb.DatabaseSchemaMetadata, config *storepb.DatabaseConfig, requestView v1pb.DatabaseMetadataView, filter *metadataFilter) *v1pb.DatabaseMetadata {
 	m := &v1pb.DatabaseMetadata{
 		Name:         fmt.Sprintf("%s%s/%s%s%s", common.InstanceNamePrefix, database.InstanceID, common.DatabaseIDPrefix, database.DatabaseName, common.MetadataSuffix),
 		CharacterSet: metadata.CharacterSet,
 		Collation:    metadata.Collation,
 	}
 	for _, schema := range metadata.Schemas {
+		if filter != nil && filter.schema != schema.Name {
+			continue
+		}
 		s := &v1pb.SchemaMetadata{
 			Name: schema.Name,
 		}
 		for _, table := range schema.Tables {
-			s.Tables = append(s.Tables, convertTableMetadata(table))
+			if filter != nil && filter.table != table.Name {
+				continue
+			}
+			s.Tables = append(s.Tables, convertTableMetadata(table, requestView))
+		}
+		// Only return table for request with a filter.
+		if filter != nil {
+			m.Schemas = append(m.Schemas, s)
+			continue
 		}
 		for _, view := range schema.Views {
-			var dependentColumnList []*v1pb.DependentColumn
-			for _, dependentColumn := range view.DependentColumns {
-				dependentColumnList = append(dependentColumnList, &v1pb.DependentColumn{
-					Schema: dependentColumn.Schema,
-					Table:  dependentColumn.Table,
-					Column: dependentColumn.Column,
-				})
+			v1View := &v1pb.ViewMetadata{
+				Name: view.Name,
+			}
+			if requestView == v1pb.DatabaseMetadataView_DATABASE_METADATA_VIEW_FULL {
+				var dependentColumnList []*v1pb.DependentColumn
+				for _, dependentColumn := range view.DependentColumns {
+					dependentColumnList = append(dependentColumnList, &v1pb.DependentColumn{
+						Schema: dependentColumn.Schema,
+						Table:  dependentColumn.Table,
+						Column: dependentColumn.Column,
+					})
+				}
+				v1View.Definition = view.Definition
+				v1View.Comment = view.Comment
+				v1View.DependentColumns = dependentColumnList
 			}
 
-			s.Views = append(s.Views, &v1pb.ViewMetadata{
-				Name:             view.Name,
-				Definition:       view.Definition,
-				Comment:          view.Comment,
-				DependentColumns: dependentColumnList,
-			})
+			s.Views = append(s.Views, v1View)
 		}
 		for _, function := range schema.Functions {
-			s.Functions = append(s.Functions, &v1pb.FunctionMetadata{
-				Name:       function.Name,
-				Definition: function.Definition,
-			})
+			v1Func := &v1pb.FunctionMetadata{
+				Name: function.Name,
+			}
+			if requestView == v1pb.DatabaseMetadataView_DATABASE_METADATA_VIEW_FULL {
+				v1Func.Definition = function.Definition
+			}
+			s.Functions = append(s.Functions, v1Func)
 		}
 		for _, task := range schema.Tasks {
-			s.Tasks = append(s.Tasks, &v1pb.TaskMetadata{
-				Name:         task.Name,
-				Id:           task.Id,
-				Owner:        task.Owner,
-				Comment:      task.Comment,
-				Warehouse:    task.Warehouse,
-				Schedule:     task.Schedule,
-				Predecessors: task.Predecessors,
-				State:        v1pb.TaskMetadata_State(task.State),
-				Condition:    task.Condition,
-				Definition:   task.Definition,
-			})
+			v1Task := &v1pb.TaskMetadata{
+				Name: task.Name,
+			}
+			if requestView == v1pb.DatabaseMetadataView_DATABASE_METADATA_VIEW_FULL {
+				v1Task.Id = task.Id
+				v1Task.Owner = task.Owner
+				v1Task.Comment = task.Comment
+				v1Task.Warehouse = task.Warehouse
+				v1Task.Schedule = task.Schedule
+				v1Task.Predecessors = task.Predecessors
+				v1Task.State = v1pb.TaskMetadata_State(task.State)
+				v1Task.Condition = task.Condition
+				v1Task.Definition = task.Definition
+			}
+			s.Tasks = append(s.Tasks, v1Task)
 		}
 		for _, stream := range schema.Streams {
-			s.Streams = append(s.Streams, &v1pb.StreamMetadata{
-				Name:       stream.Name,
-				TableName:  stream.TableName,
-				Owner:      stream.Owner,
-				Comment:    stream.Comment,
-				Type:       v1pb.StreamMetadata_Type(stream.Type),
-				Stale:      stream.Stale,
-				Mode:       v1pb.StreamMetadata_Mode(stream.Mode),
-				Definition: stream.Definition,
-			})
+			v1Stream := &v1pb.StreamMetadata{
+				Name: stream.Name,
+			}
+			if requestView == v1pb.DatabaseMetadataView_DATABASE_METADATA_VIEW_FULL {
+				v1Stream.TableName = stream.TableName
+				v1Stream.Owner = stream.Owner
+				v1Stream.Comment = stream.Comment
+				v1Stream.Type = v1pb.StreamMetadata_Type(stream.Type)
+				v1Stream.Stale = stream.Stale
+				v1Stream.Mode = v1pb.StreamMetadata_Mode(stream.Mode)
+				v1Stream.Definition = stream.Definition
+			}
+			s.Streams = append(s.Streams, v1Stream)
 		}
 		m.Schemas = append(m.Schemas, s)
 	}
@@ -1994,25 +2074,38 @@ func convertDatabaseMetadata(database *store.DatabaseMessage, metadata *storepb.
 		})
 	}
 
-	m.SchemaConfigs = convertDatabaseConfig(config)
+	if requestView == v1pb.DatabaseMetadataView_DATABASE_METADATA_VIEW_FULL {
+		databaseConfig := convertDatabaseConfig(config, filter)
+		if databaseConfig != nil {
+			m.SchemaConfigs = databaseConfig.SchemaConfigs
+		}
+	}
 	return m
 }
 
-func convertDatabaseConfig(config *storepb.DatabaseConfig) []*v1pb.SchemaConfig {
-	var schemaConfigs []*v1pb.SchemaConfig
+func convertDatabaseConfig(config *storepb.DatabaseConfig, filter *metadataFilter) *v1pb.DatabaseConfig {
 	if config == nil {
 		return nil
 	}
+	databaseConfig := &v1pb.DatabaseConfig{
+		Name: config.Name,
+	}
 	for _, schema := range config.SchemaConfigs {
+		if filter != nil && filter.schema != schema.Name {
+			continue
+		}
 		s := &v1pb.SchemaConfig{
 			Name: schema.Name,
 		}
 		for _, table := range schema.TableConfigs {
+			if filter != nil && filter.table != table.Name {
+				continue
+			}
 			s.TableConfigs = append(s.TableConfigs, convertTableConfig(table))
 		}
-		schemaConfigs = append(schemaConfigs, s)
+		databaseConfig.SchemaConfigs = append(databaseConfig.SchemaConfigs, s)
 	}
-	return schemaConfigs
+	return databaseConfig
 }
 
 func convertTableConfig(table *storepb.TableConfig) *v1pb.TableConfig {
@@ -2039,11 +2132,15 @@ func convertColumnConfig(column *storepb.ColumnConfig) *v1pb.ColumnConfig {
 	}
 }
 
-func convertV1DatabaseConfig(databaseName string, schemaConfig []*v1pb.SchemaConfig) *storepb.DatabaseConfig {
-	m := &storepb.DatabaseConfig{
-		Name: databaseName,
+func convertV1DatabaseConfig(databaseConfig *v1pb.DatabaseConfig) *storepb.DatabaseConfig {
+	if databaseConfig == nil {
+		return nil
 	}
-	for _, schema := range schemaConfig {
+
+	config := &storepb.DatabaseConfig{
+		Name: databaseConfig.Name,
+	}
+	for _, schema := range databaseConfig.SchemaConfigs {
 		s := &storepb.SchemaConfig{
 			Name: schema.Name,
 		}
@@ -2060,12 +2157,16 @@ func convertV1DatabaseConfig(databaseName string, schemaConfig []*v1pb.SchemaCon
 			}
 			s.TableConfigs = append(s.TableConfigs, t)
 		}
-		m.SchemaConfigs = append(m.SchemaConfigs, s)
+		config.SchemaConfigs = append(config.SchemaConfigs, s)
 	}
-	return m
+	return config
 }
 
 func convertV1TableConfig(table *v1pb.TableConfig) *storepb.TableConfig {
+	if table == nil {
+		return nil
+	}
+
 	t := &storepb.TableConfig{
 		Name: table.Name,
 	}
@@ -2076,6 +2177,10 @@ func convertV1TableConfig(table *v1pb.TableConfig) *storepb.TableConfig {
 }
 
 func convertV1ColumnConfig(column *v1pb.ColumnConfig) *storepb.ColumnConfig {
+	if column == nil {
+		return nil
+	}
+
 	return &storepb.ColumnConfig{
 		Name:           column.Name,
 		SemanticTypeId: column.SemanticTypeId,
@@ -2377,7 +2482,7 @@ func (s *DatabaseService) mysqlAdviseIndex(ctx context.Context, request *v1pb.Ad
 		return nil, status.Errorf(codes.FailedPrecondition, "OpenAI key is not set")
 	}
 
-	var schemas []*store.DBSchema
+	var schemas []*model.DBSchema
 
 	// Deal with the cross database query.
 	resources, err := base.ExtractResourceList(instance.Engine, database.DatabaseName, "", request.Statement)
@@ -2454,9 +2559,9 @@ func (s *DatabaseService) mysqlAdviseIndex(ctx context.Context, request *v1pb.Ad
 			if len(matches) != 4 {
 				return errors.Errorf("failed to extract index name, database name and table name from %s", resp.CurrentIndex)
 			}
-			var dbSchema *store.DBSchema
+			var dbSchema *model.DBSchema
 			for _, schema := range schemas {
-				if schema.Metadata.Name == matches[2] {
+				if schema.GetMetadata().Name == matches[2] {
 					dbSchema = schema
 					break
 				}
@@ -2663,7 +2768,7 @@ func getOpenAIResponse(ctx context.Context, messages []openai.ChatCompletionMess
 	return &result, nil
 }
 
-func convertTableMetadata(table *storepb.TableMetadata) *v1pb.TableMetadata {
+func convertTableMetadata(table *storepb.TableMetadata, view v1pb.DatabaseMetadataView) *v1pb.TableMetadata {
 	if table == nil {
 		return nil
 	}
@@ -2679,6 +2784,10 @@ func convertTableMetadata(table *storepb.TableMetadata) *v1pb.TableMetadata {
 		Comment:        table.Comment,
 		Classification: table.Classification,
 		UserComment:    table.UserComment,
+	}
+	// We only return the table info for basic view.
+	if view != v1pb.DatabaseMetadataView_DATABASE_METADATA_VIEW_FULL {
+		return t
 	}
 	for _, column := range table.Columns {
 		t.Columns = append(t.Columns, convertColumnMetadata(column))

@@ -113,7 +113,9 @@ func (s *Store) ListUsers(ctx context.Context, find *FindUserMessage) ([]*UserMe
 // GetUserByID gets the user by ID.
 func (s *Store) GetUserByID(ctx context.Context, id int) (*UserMessage, error) {
 	if user, ok := s.userIDCache.Load(id); ok {
-		return user.(*UserMessage), nil
+		if v, ok := user.(*UserMessage); ok {
+			return v, nil
+		}
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -147,7 +149,11 @@ func (*Store) listUserImpl(ctx context.Context, tx *Tx, find *FindUserMessage) (
 		where, args = append(where, fmt.Sprintf("principal.id = $%d", len(args)+1)), append(args, *v)
 	}
 	if v := find.Email; v != nil {
-		where, args = append(where, fmt.Sprintf("principal.email = $%d", len(args)+1)), append(args, strings.ToLower(*v))
+		if *v == api.AllUsers {
+			where, args = append(where, fmt.Sprintf("principal.email = $%d", len(args)+1)), append(args, *v)
+		} else {
+			where, args = append(where, fmt.Sprintf("principal.email = $%d", len(args)+1)), append(args, strings.ToLower(*v))
+		}
 	}
 	if v := find.Type; v != nil {
 		where, args = append(where, fmt.Sprintf("principal.type = $%d", len(args)+1)), append(args, *v)

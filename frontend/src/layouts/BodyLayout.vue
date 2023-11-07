@@ -27,13 +27,6 @@
               <div class="flex-1 h-0 py-4 overflow-y-auto">
                 <router-view name="leftSidebar" />
               </div>
-              <router-link
-                to="/archive"
-                class="outline-item group flex items-center px-4 py-1.5"
-              >
-                <heroicons-outline:archive class="w-5 h-5 mr-2" />
-                {{ $t("common.archive") }}
-              </router-link>
               <div
                 class="flex-shrink-0 flex border-t border-block-border px-3 py-1.5"
               >
@@ -98,13 +91,6 @@
             <div class="flex-1 flex flex-col py-0 overflow-y-auto">
               <router-view name="leftSidebar" />
             </div>
-            <router-link
-              to="/archive"
-              class="outline-item group flex items-center px-4 py-1.5"
-            >
-              <heroicons-outline:archive class="w-5 h-5 mr-2" />
-              {{ $t("common.archive") }}
-            </router-link>
             <div
               class="flex-shrink-0 flex justify-between border-t border-block-border px-3 py-1.5"
             >
@@ -270,14 +256,14 @@ import {
   useCurrentUserV1,
   useSubscriptionV1Store,
 } from "@/store";
+import { QuickActionType, RoleType } from "@/types";
 import { PlanType } from "@/types/proto/v1/subscription_service";
 import { hasWorkspacePermissionV1 } from "@/utils";
+import { getQuickActionList } from "@/utils";
 import DashboardHeader from "@/views/DashboardHeader.vue";
 import Breadcrumb from "../components/Breadcrumb.vue";
 import QuickActionPanel from "../components/QuickActionPanel.vue";
 import Quickstart from "../components/Quickstart.vue";
-import { QuickActionType } from "../types";
-import { isDBA, isDeveloper, isOwner } from "../utils";
 
 interface LocalState {
   showMobileOverlay: boolean;
@@ -311,49 +297,14 @@ const canUpgrade = computed(() => {
   return actuatorStore.hasNewRelease;
 });
 
-const currentUserV1 = useCurrentUserV1();
-
 const quickActionList = computed(() => {
-  const role = currentUserV1.value.userRole;
   const quickActionListFunc =
     router.currentRoute.value.meta.quickActionListByRole;
   const listByRole = quickActionListFunc
     ? quickActionListFunc(router.currentRoute.value)
-    : new Map();
-  const list: QuickActionType[] = [];
+    : new Map<RoleType, QuickActionType[]>();
 
-  // We write this way because for free version, the user wears the three role hat,
-  // and we want to display all quick actions relevant to those three roles without duplication.
-  if (isOwner(role)) {
-    for (const item of listByRole.get("OWNER") || []) {
-      list.push(item);
-    }
-  }
-
-  if (isDBA(role)) {
-    for (const item of listByRole.get("DBA") || []) {
-      if (
-        !list.find((myItem: QuickActionType) => {
-          return item == myItem;
-        })
-      ) {
-        list.push(item);
-      }
-    }
-  }
-
-  if (isDeveloper(role)) {
-    for (const item of listByRole.get("DEVELOPER") || []) {
-      if (
-        !list.find((myItem: QuickActionType) => {
-          return item == myItem;
-        })
-      ) {
-        list.push(item);
-      }
-    }
-  }
-  return list;
+  return getQuickActionList(listByRole);
 });
 
 const showBreadcrumb = computed(() => {

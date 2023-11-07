@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/bytebase/bytebase/backend/common"
+	"github.com/bytebase/bytebase/backend/component/ghost"
 	api "github.com/bytebase/bytebase/backend/legacyapi"
 	"github.com/bytebase/bytebase/backend/store"
 	"github.com/bytebase/bytebase/backend/utils"
@@ -45,7 +46,7 @@ func (e *GhostSyncExecutor) Run(ctx context.Context, config *storepb.PlanCheckRu
 					Status:  storepb.PlanCheckRunResult_Result_ERROR,
 					Title:   "gh-ost dry run failed",
 					Content: panicErr.Error(),
-					Code:    common.Internal.Int64(),
+					Code:    common.Internal.Int32(),
 					Report:  nil,
 				},
 			}
@@ -79,11 +80,6 @@ func (e *GhostSyncExecutor) Run(ctx context.Context, config *storepb.PlanCheckRu
 		return nil, common.Errorf(common.Internal, "admin data source not found for instance %d", instance.UID)
 	}
 
-	instanceUsers, err := e.store.ListInstanceUsers(ctx, &store.FindInstanceUserMessage{InstanceUID: instance.UID})
-	if err != nil {
-		return nil, common.Errorf(common.Internal, "failed to find instance user by instanceID %d", instance.UID)
-	}
-
 	sheetUID := int(config.SheetUid)
 	sheet, err := e.store.GetSheet(ctx, &store.FindSheetMessage{UID: &sheetUID}, api.SystemBotID)
 	if err != nil {
@@ -101,17 +97,12 @@ func (e *GhostSyncExecutor) Run(ctx context.Context, config *storepb.PlanCheckRu
 	// To avoid leaking the rendered statement, the error message should use the original statement and not the rendered statement.
 	renderedStatement := utils.RenderStatement(statement, materials)
 
-	tableName, err := utils.GetTableNameFromStatement(renderedStatement)
+	tableName, err := ghost.GetTableNameFromStatement(renderedStatement)
 	if err != nil {
 		return nil, common.Wrapf(err, common.Internal, "failed to parse table name from statement, statement: %v", statement)
 	}
 
-	ghostConfig, err := utils.GetGhostConfig(rand.Intn(10000000), database, adminDataSource, e.secret, instanceUsers, tableName, renderedStatement, true, 20000000)
-	if err != nil {
-		return nil, err
-	}
-
-	migrationContext, err := utils.NewMigrationContext(ghostConfig)
+	migrationContext, err := ghost.NewMigrationContext(rand.Intn(10000000), database, adminDataSource, e.secret, tableName, renderedStatement, true, config.GhostFlags, 20000000)
 	if err != nil {
 		return nil, common.Wrapf(err, common.Internal, "failed to create migration context")
 	}
@@ -124,7 +115,7 @@ func (e *GhostSyncExecutor) Run(ctx context.Context, config *storepb.PlanCheckRu
 				Status:  storepb.PlanCheckRunResult_Result_ERROR,
 				Title:   "gh-ost dry run failed",
 				Content: err.Error(),
-				Code:    common.Internal.Int64(),
+				Code:    common.Internal.Int32(),
 				Report:  nil,
 			},
 		}, nil
@@ -135,7 +126,7 @@ func (e *GhostSyncExecutor) Run(ctx context.Context, config *storepb.PlanCheckRu
 			Status:  storepb.PlanCheckRunResult_Result_SUCCESS,
 			Title:   "OK",
 			Content: "gh-ost dry run succeeded",
-			Code:    common.Ok.Int64(),
+			Code:    common.Ok.Int32(),
 			Report:  nil,
 		},
 	}, nil

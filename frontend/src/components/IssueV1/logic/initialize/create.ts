@@ -1,7 +1,6 @@
 import { groupBy, orderBy } from "lodash-es";
 import { v4 as uuidv4 } from "uuid";
 import { reactive } from "vue";
-import { type _RouteLocationBase } from "vue-router";
 import { rolloutServiceClient } from "@/grpcweb";
 import { TemplateType } from "@/plugins";
 import {
@@ -12,6 +11,7 @@ import {
   useProjectV1Store,
   useSheetV1Store,
 } from "@/store";
+import { getProjectAndSchemaDesignSheetId } from "@/store/modules/v1/common";
 import {
   ComposedProject,
   emptyIssue,
@@ -42,44 +42,52 @@ import { sheetNameForSpec } from "../plan";
 import { createEmptyLocalSheet, getLocalSheetByName } from "../sheet";
 import { trySetDefaultAssignee } from "./assignee";
 
+export type InitialSQL = {
+  sqlList?: string[];
+  sql?: string;
+};
+
 type CreateIssueParams = {
   databaseUIDList: string[];
   project: ComposedProject;
-  route: _RouteLocationBase;
-  initialSQL: {
-    sqlList?: string[];
-    sql?: string;
-  };
+  query: Record<string, string>;
+  initialSQL: InitialSQL;
+  branch?: string;
 };
 
-export const createIssueSkeleton = async (route: _RouteLocationBase) => {
+export const createIssueSkeleton = async (query: Record<string, string>) => {
   const issue = emptyIssue();
   const me = useCurrentUserV1();
   issue.creator = `users/${me.value.email}`;
   issue.creatorEntity = me.value;
 
   const project = await useProjectV1Store().getOrFetchProjectByUID(
-    route.query.project as string
+    query.project
   );
   issue.project = project.name;
   issue.projectEntity = project;
   issue.uid = nextUID();
   issue.name = `${project.name}/issues/${issue.uid}`;
-  issue.title = route.query.name as string;
+  issue.title = query.name;
   issue.type = Issue_Type.DATABASE_CHANGE;
   issue.status = IssueStatus.OPEN;
 
-  const databaseUIDList = ((route.query.databaseList as string) || "")
+  const databaseUIDList = (query.databaseList ?? "")
     .split(",")
     .filter((uid) => uid && uid !== String(UNKNOWN_ID));
   await prepareDatabaseList(databaseUIDList, project.uid);
+  const branch = query.branch || undefined;
 
   const params: CreateIssueParams = {
     databaseUIDList,
     project,
-    route,
-    initialSQL: extractInitialSQLListFromQuery(route),
+    query,
+    initialSQL: extractInitialSQLListFromQuery(query),
+    branch,
   };
+
+  // Prepare params context for building plan.
+  await prepareParamsContext(params);
 
   const plan = await buildPlan(params);
   issue.plan = plan.name;
@@ -91,7 +99,7 @@ export const createIssueSkeleton = async (route: _RouteLocationBase) => {
 
   await trySetDefaultAssignee(issue);
 
-  const description = route.query.description as string;
+  const description = query.description;
   if (description) {
     issue.description = description;
   }
@@ -99,33 +107,37 @@ export const createIssueSkeleton = async (route: _RouteLocationBase) => {
   return issue;
 };
 
+const prepareParamsContext = async (params: CreateIssueParams) => {
+  if (params.branch) {
+    const [_, sheetId] = getProjectAndSchemaDesignSheetId(params.branch);
+    await useSheetV1Store().getOrFetchSheetByUID(sheetId);
+  }
+};
+
 export const buildPlan = async (params: CreateIssueParams) => {
-  const { databaseUIDList, project, route } = params;
+  const { databaseUIDList, project, query } = params;
 
   const plan = Plan.fromJSON({
     uid: nextUID(),
   });
   plan.name = `${project.name}/plans/${plan.uid}`;
-  if (route.query.changelist) {
+  if (query.changelist) {
     // build plan for changelist
     plan.steps = await buildStepsViaChangelist(
       databaseUIDList,
-      route.query.changelist as string,
+      query.changelist,
       params
     );
-  } else if (route.query.mode === "tenant") {
+  } else if (query.batch === "1") {
     // in tenant mode, all specs share a unique sheet
     const sheetUID = nextUID();
     // build tenant plan
     if (databaseUIDList.length === 0) {
       // evaluate DeploymentConfig and generate steps/specs
-      if (
-        route.query.databaseGroupName &&
-        typeof route.query.databaseGroupName === "string"
-      ) {
+      if (query.databaseGroupName) {
         plan.steps = await buildStepsForDatabaseGroup(
           params,
-          route.query.databaseGroupName as string
+          query.databaseGroupName
         );
       } else {
         plan.steps = await buildStepsViaDeploymentConfig(params, sheetUID);
@@ -176,6 +188,7 @@ export const buildSteps = async (
       const spec = await buildSpecForTarget(db.name, params, sheetUID);
       step.specs.push(spec);
       maybeSetInitialSQLForSpec(spec, sqlIndex, params);
+      maybeSetInitialDatabaseConfigForSpec(spec, params);
     }
     steps.push(step);
   }
@@ -220,6 +233,7 @@ export const buildStepsViaDeploymentConfig = async (
     sheetUID
   );
   maybeSetInitialSQLForSpec(spec, 0, params);
+  maybeSetInitialDatabaseConfigForSpec(spec, params);
   const step = Plan_Step.fromPartial({
     specs: [spec],
   });
@@ -282,11 +296,11 @@ export const buildStepsViaChangelist = async (
 
 export const buildSpecForTarget = async (
   target: string,
-  { project, route }: CreateIssueParams,
+  { project, query }: CreateIssueParams,
   sheetUID?: string
 ) => {
   const sheet = `${project.name}/sheets/${sheetUID ?? nextUID()}`;
-  const template = route.query.template as TemplateType;
+  const template = query.template as TemplateType | undefined;
   const spec = Plan_Spec.fromJSON({
     id: uuidv4(),
   });
@@ -295,10 +309,8 @@ export const buildSpecForTarget = async (
       target,
       type: Plan_ChangeDatabaseConfig_Type.DATA,
     });
-    if (route.query.sheetId) {
-      const sheet = await useSheetV1Store().getOrFetchSheetByUID(
-        route.query.sheetId as string
-      );
+    if (query.sheetId) {
+      const sheet = await useSheetV1Store().getOrFetchSheetByUID(query.sheetId);
       if (sheet) {
         spec.changeDatabaseConfig.sheet = sheet.name;
       }
@@ -309,7 +321,7 @@ export const buildSpecForTarget = async (
   }
   if (template === "bb.issue.database.schema.update") {
     const type =
-      route.query.ghost === "1"
+      query.ghost === "1"
         ? Plan_ChangeDatabaseConfig_Type.MIGRATE_GHOST
         : Plan_ChangeDatabaseConfig_Type.MIGRATE;
     spec.changeDatabaseConfig = Plan_ChangeDatabaseConfig.fromJSON({
@@ -356,11 +368,8 @@ const maybeWrapStatementsAsSheets = (
   rollout: Rollout,
   params: CreateIssueParams
 ) => {
-  const { route } = params;
-  if (
-    !route.query.databaseGroupName ||
-    typeof route.query.databaseGroupName !== "string"
-  ) {
+  const { query } = params;
+  if (!query.databaseGroupName) {
     return;
   }
   const { stages } = rollout;
@@ -404,13 +413,38 @@ const maybeSetInitialSQLForSpec = (
   }
 };
 
+const maybeSetInitialDatabaseConfigForSpec = (
+  spec: Plan_Spec,
+  params: CreateIssueParams
+) => {
+  const branch = params.branch;
+  if (!branch) {
+    return;
+  }
+
+  const sheetName = sheetNameForSpec(spec);
+  if (!sheetName) return;
+  const uid = extractSheetUID(sheetName);
+  if (!uid.startsWith("-")) {
+    // If the sheet is a remote sheet, ignore initial Database configs.
+    return;
+  }
+
+  const [_, sheetId] = getProjectAndSchemaDesignSheetId(branch);
+  const temp = useSheetV1Store().getSheetByUID(sheetId);
+  if (temp && temp.payload) {
+    const sheetEntity = getLocalSheetByName(sheetName);
+    sheetEntity.payload = temp.payload;
+  }
+};
+
 const extractInitialSQLListFromQuery = (
-  route: _RouteLocationBase
+  query: Record<string, string>
 ): {
   sqlList?: string[];
   sql?: string;
 } => {
-  const sqlListJSON = route.query.sqlList as string;
+  const sqlListJSON = query.sqlList;
   if (sqlListJSON && sqlListJSON.startsWith("[") && sqlListJSON.endsWith("]")) {
     try {
       const sqlList = JSON.parse(sqlListJSON) as string[];
@@ -425,7 +459,7 @@ const extractInitialSQLListFromQuery = (
       // Nothing
     }
   }
-  const sql = route.query.sql;
+  const sql = query.sql;
   if (sql && typeof sql === "string") {
     return {
       sql,

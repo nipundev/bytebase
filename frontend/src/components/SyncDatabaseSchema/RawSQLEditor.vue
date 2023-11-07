@@ -76,6 +76,7 @@
 
 <script lang="ts" setup>
 import { useDebounceFn } from "@vueuse/core";
+import Long from "long";
 import { NSelect } from "naive-ui";
 import { computed, onMounted, nextTick, reactive } from "vue";
 import { useI18n } from "vue-i18n";
@@ -148,10 +149,9 @@ const isSheetOversized = computed(() => {
   if (!sheet.value) {
     return false;
   }
-  return (
-    new TextDecoder().decode(sheet.value.content).length <
-    sheet.value.contentSize
-  );
+  return Long.fromNumber(
+    new TextDecoder().decode(sheet.value.content).length
+  ).lt(sheet.value.contentSize);
 });
 
 onMounted(async () => {
@@ -228,9 +228,9 @@ const handleUploadFile = (e: Event) => {
   cleanup();
 };
 
-const handleStatementChange = async (statement: string) => {
-  await handleUpdateSheet(statement);
+const handleStatementChange = (statement: string) => {
   state.editStatement = statement;
+  handleUpdateSheet(statement);
   update();
 };
 

@@ -2,6 +2,7 @@
 package mysqlwip
 
 import (
+	"regexp"
 	"sort"
 	"strings"
 
@@ -50,4 +51,24 @@ func restoreNode(node ast.Node, flag format.RestoreFlags) (string, error) {
 		return "", err
 	}
 	return buffer.String(), nil
+}
+
+// getTemplateRegexp formats the template as regex.
+func getTemplateRegexp(template string, templateList []string, tokens map[string]string) (*regexp.Regexp, error) {
+	for _, key := range templateList {
+		if token, ok := tokens[key]; ok {
+			template = strings.ReplaceAll(template, key, token)
+		}
+	}
+
+	return regexp.Compile(template)
+}
+
+func canNull(column *ast.ColumnDef) bool {
+	for _, option := range column.Options {
+		if option.Tp == ast.ColumnOptionNotNull || option.Tp == ast.ColumnOptionPrimaryKey {
+			return false
+		}
+	}
+	return true
 }

@@ -21,9 +21,9 @@ import (
 	"github.com/bytebase/bytebase/backend/common/log"
 	"github.com/bytebase/bytebase/backend/component/activity"
 	"github.com/bytebase/bytebase/backend/component/state"
-	enterpriseAPI "github.com/bytebase/bytebase/backend/enterprise/api"
+	enterprise "github.com/bytebase/bytebase/backend/enterprise/api"
 	api "github.com/bytebase/bytebase/backend/legacyapi"
-	metricAPI "github.com/bytebase/bytebase/backend/metric"
+	metricapi "github.com/bytebase/bytebase/backend/metric"
 	"github.com/bytebase/bytebase/backend/plugin/metric"
 	"github.com/bytebase/bytebase/backend/runner/metricreport"
 	"github.com/bytebase/bytebase/backend/runner/relay"
@@ -40,7 +40,7 @@ type IssueService struct {
 	activityManager *activity.Manager
 	relayRunner     *relay.Runner
 	stateCfg        *state.State
-	licenseService  enterpriseAPI.LicenseService
+	licenseService  enterprise.LicenseService
 	metricReporter  *metricreport.Reporter
 }
 
@@ -50,7 +50,7 @@ func NewIssueService(
 	activityManager *activity.Manager,
 	relayRunner *relay.Runner,
 	stateCfg *state.State,
-	licenseService enterpriseAPI.LicenseService,
+	licenseService enterprise.LicenseService,
 	metricReporter *metricreport.Reporter,
 ) *IssueService {
 	return &IssueService{
@@ -460,20 +460,32 @@ func (s *IssueService) CreateIssue(ctx context.Context, request *v1pb.CreateIssu
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
-	ok, err := isUserAtLeastProjectDeveloper(ctx, s.store, projectID)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to check if the user can create issue, error: %v", err)
-	}
-	if !ok {
-		return nil, status.Errorf(codes.PermissionDenied, "permission denied")
-	}
+	_, loopback := ctx.Value(common.LoopbackContextKey).(bool)
 
 	switch request.Issue.Type {
 	case v1pb.Issue_TYPE_UNSPECIFIED:
 		return nil, status.Errorf(codes.InvalidArgument, "issue type is required")
 	case v1pb.Issue_GRANT_REQUEST:
+		if !loopback {
+			ok, err := isUserAtLeastProjectViewer(ctx, s.store, projectID)
+			if err != nil {
+				return nil, status.Errorf(codes.Internal, "failed to check if the user can create issue, error: %v", err)
+			}
+			if !ok {
+				return nil, status.Errorf(codes.PermissionDenied, "permission denied")
+			}
+		}
 		return s.createIssueGrantRequest(ctx, request)
 	case v1pb.Issue_DATABASE_CHANGE:
+		if !loopback {
+			ok, err := isUserAtLeastProjectDeveloper(ctx, s.store, projectID)
+			if err != nil {
+				return nil, status.Errorf(codes.Internal, "failed to check if the user can create issue, error: %v", err)
+			}
+			if !ok {
+				return nil, status.Errorf(codes.PermissionDenied, "permission denied")
+			}
+		}
 		return s.createIssueDatabaseChange(ctx, request)
 	default:
 		return nil, status.Errorf(codes.InvalidArgument, "unknown issue type %q", request.Issue.Type)
@@ -481,7 +493,10 @@ func (s *IssueService) CreateIssue(ctx context.Context, request *v1pb.CreateIssu
 }
 
 func (s *IssueService) createIssueDatabaseChange(ctx context.Context, request *v1pb.CreateIssueRequest) (*v1pb.Issue, error) {
-	creatorID := ctx.Value(common.PrincipalIDContextKey).(int)
+	principalID, ok := ctx.Value(common.PrincipalIDContextKey).(int)
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "principal ID not found")
+	}
 	projectID, err := common.GetProjectID(request.Parent)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, err.Error())
@@ -529,16 +544,20 @@ func (s *IssueService) createIssueDatabaseChange(ctx context.Context, request *v
 		rolloutUID = &pipeline.ID
 	}
 
-	assigneeEmail, err := common.GetUserEmail(request.Issue.Assignee)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
-	}
-	assignee, err := s.store.GetUser(ctx, &store.FindUserMessage{Email: &assigneeEmail})
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to get user by email %q, error: %v", assigneeEmail, err)
-	}
-	if assignee == nil {
-		return nil, status.Errorf(codes.NotFound, "assignee not found for email: %q", assigneeEmail)
+	var issueAssignee *store.UserMessage
+	if request.Issue.Assignee != "" {
+		assigneeEmail, err := common.GetUserEmail(request.Issue.Assignee)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		}
+		assignee, err := s.store.GetUser(ctx, &store.FindUserMessage{Email: &assigneeEmail})
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to get user by email %q, error: %v", assigneeEmail, err)
+		}
+		if assignee == nil {
+			return nil, status.Errorf(codes.NotFound, "assignee not found for email: %q", assigneeEmail)
+		}
+		issueAssignee = assignee
 	}
 
 	issueCreateMessage := &store.IssueMessage{
@@ -549,7 +568,7 @@ func (s *IssueService) createIssueDatabaseChange(ctx context.Context, request *v
 		Status:      api.IssueOpen,
 		Type:        api.IssueDatabaseGeneral,
 		Description: request.Issue.Description,
-		Assignee:    assignee,
+		Assignee:    issueAssignee,
 	}
 
 	issueCreateMessage.Payload = &storepb.IssuePayload{
@@ -560,7 +579,7 @@ func (s *IssueService) createIssueDatabaseChange(ctx context.Context, request *v
 		},
 	}
 
-	issue, err := s.store.CreateIssueV2(ctx, issueCreateMessage, creatorID)
+	issue, err := s.store.CreateIssueV2(ctx, issueCreateMessage, principalID)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to create issue, error: %v", err)
 	}
@@ -574,7 +593,7 @@ func (s *IssueService) createIssueDatabaseChange(ctx context.Context, request *v
 		return nil, errors.Wrapf(err, "failed to create ActivityIssueCreate activity after creating the issue: %v", issue.Title)
 	}
 	activityCreate := &store.ActivityMessage{
-		CreatorUID:   creatorID,
+		CreatorUID:   principalID,
 		ContainerUID: issue.UID,
 		Type:         api.ActivityIssueCreate,
 		Level:        api.ActivityInfo,
@@ -595,7 +614,10 @@ func (s *IssueService) createIssueDatabaseChange(ctx context.Context, request *v
 }
 
 func (s *IssueService) createIssueGrantRequest(ctx context.Context, request *v1pb.CreateIssueRequest) (*v1pb.Issue, error) {
-	creatorID := ctx.Value(common.PrincipalIDContextKey).(int)
+	principalID, ok := ctx.Value(common.PrincipalIDContextKey).(int)
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "principal ID not found")
+	}
 	projectID, err := common.GetProjectID(request.Parent)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, err.Error())
@@ -608,14 +630,6 @@ func (s *IssueService) createIssueGrantRequest(ctx context.Context, request *v1p
 	}
 	if project == nil {
 		return nil, status.Errorf(codes.NotFound, "project not found for id: %v", projectID)
-	}
-
-	assignee, err := s.store.GetUserByID(ctx, api.SystemBotID)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to get systemBot, error: %v", err)
-	}
-	if assignee == nil {
-		return nil, status.Errorf(codes.Internal, "systemBot not found")
 	}
 
 	if request.Issue.GrantRequest.GetRole() == "" {
@@ -667,7 +681,7 @@ func (s *IssueService) createIssueGrantRequest(ctx context.Context, request *v1p
 		Status:      api.IssueOpen,
 		Type:        api.IssueGrantRequest,
 		Description: request.Issue.Description,
-		Assignee:    assignee,
+		Assignee:    nil,
 	}
 
 	convertedGrantRequest, err := convertGrantRequest(ctx, s.store, request.Issue.GrantRequest)
@@ -684,7 +698,7 @@ func (s *IssueService) createIssueGrantRequest(ctx context.Context, request *v1p
 		},
 	}
 
-	issue, err := s.store.CreateIssueV2(ctx, issueCreateMessage, creatorID)
+	issue, err := s.store.CreateIssueV2(ctx, issueCreateMessage, principalID)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to create issue, error: %v", err)
 	}
@@ -698,7 +712,7 @@ func (s *IssueService) createIssueGrantRequest(ctx context.Context, request *v1p
 		return nil, errors.Wrapf(err, "failed to create ActivityIssueCreate activity after creating the issue: %v", issue.Title)
 	}
 	activityCreate := &store.ActivityMessage{
-		CreatorUID:   creatorID,
+		CreatorUID:   principalID,
 		ContainerUID: issue.UID,
 		Type:         api.ActivityIssueCreate,
 		Level:        api.ActivityInfo,
@@ -716,7 +730,7 @@ func (s *IssueService) createIssueGrantRequest(ctx context.Context, request *v1p
 	}
 
 	s.metricReporter.Report(ctx, &metric.Metric{
-		Name:  metricAPI.IssueCreateMetricName,
+		Name:  metricapi.IssueCreateMetricName,
 		Value: 1,
 		Labels: map[string]any{
 			"type": issue.Type,
@@ -756,7 +770,10 @@ func (s *IssueService) ApproveIssue(ctx context.Context, request *v1pb.ApproveIs
 		return nil, status.Errorf(codes.InvalidArgument, "the issue has been approved")
 	}
 
-	principalID := ctx.Value(common.PrincipalIDContextKey).(int)
+	principalID, ok := ctx.Value(common.PrincipalIDContextKey).(int)
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "principal ID not found")
+	}
 	user, err := s.store.GetUserByID(ctx, principalID)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to find user by id %v", principalID)
@@ -938,7 +955,10 @@ func (s *IssueService) RejectIssue(ctx context.Context, request *v1pb.RejectIssu
 		return nil, status.Errorf(codes.InvalidArgument, "the issue has been approved")
 	}
 
-	principalID := ctx.Value(common.PrincipalIDContextKey).(int)
+	principalID, ok := ctx.Value(common.PrincipalIDContextKey).(int)
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "principal ID not found")
+	}
 	user, err := s.store.GetUserByID(ctx, principalID)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to find user by id %v", principalID)
@@ -1031,7 +1051,10 @@ func (s *IssueService) RequestIssue(ctx context.Context, request *v1pb.RequestIs
 		return nil, status.Errorf(codes.InvalidArgument, "cannot request issues because the issue is not rejected")
 	}
 
-	principalID := ctx.Value(common.PrincipalIDContextKey).(int)
+	principalID, ok := ctx.Value(common.PrincipalIDContextKey).(int)
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "principal ID not found")
+	}
 	user, err := s.store.GetUserByID(ctx, principalID)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to find user by id %v", principalID)
@@ -1111,7 +1134,10 @@ func (s *IssueService) RequestIssue(ctx context.Context, request *v1pb.RequestIs
 
 // UpdateIssue updates the issue.
 func (s *IssueService) UpdateIssue(ctx context.Context, request *v1pb.UpdateIssueRequest) (*v1pb.Issue, error) {
-	principalID := ctx.Value(common.PrincipalIDContextKey).(int)
+	principalID, ok := ctx.Value(common.PrincipalIDContextKey).(int)
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "principal ID not found")
+	}
 	if request.UpdateMask == nil {
 		return nil, status.Errorf(codes.InvalidArgument, "update_mask must be set")
 	}
@@ -1120,7 +1146,7 @@ func (s *IssueService) UpdateIssue(ctx context.Context, request *v1pb.UpdateIssu
 		return nil, err
 	}
 
-	ok, err := isUserAtLeastProjectDeveloper(ctx, s.store, issue.Project.ResourceID)
+	ok, err = isUserAtLeastProjectDeveloper(ctx, s.store, issue.Project.ResourceID)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to check if the user can update issue, error: %v", err)
 	}
@@ -1233,36 +1259,63 @@ func (s *IssueService) UpdateIssue(ctx context.Context, request *v1pb.UpdateIssu
 			patch.Subscribers = &subscribers
 
 		case "assignee":
-			assigneeEmail, err := common.GetUserEmail(request.Issue.Assignee)
-			if err != nil {
-				return nil, status.Errorf(codes.InvalidArgument, "failed to get user email from %v, error: %v", request.Issue.Assignee, err)
+			oldAssigneeID := ""
+			if issue.Assignee != nil {
+				oldAssigneeID = strconv.Itoa(issue.Assignee.ID)
 			}
-			user, err := s.store.GetUser(ctx, &store.FindUserMessage{Email: &assigneeEmail})
-			if err != nil {
-				return nil, status.Errorf(codes.Internal, "failed to get user %v, error: %v", assigneeEmail, err)
-			}
-			if user == nil {
-				return nil, status.Errorf(codes.NotFound, "user %v not found", request.Issue.Assignee)
-			}
-			patch.Assignee = user
+			if request.Issue.Assignee == "" {
+				patch.UpdateAssignee = true
+				patch.Assignee = nil
+				payload := &api.ActivityIssueFieldUpdatePayload{
+					FieldID:   api.IssueFieldAssignee,
+					OldValue:  oldAssigneeID,
+					NewValue:  "",
+					IssueName: issue.Title,
+				}
+				activityPayload, err := json.Marshal(payload)
+				if err != nil {
+					return nil, status.Errorf(codes.Internal, "failed to marshal activity payload, error: %v", err)
+				}
+				activityCreates = append(activityCreates, &store.ActivityMessage{
+					CreatorUID:   principalID,
+					ContainerUID: issue.UID,
+					Type:         api.ActivityIssueFieldUpdate,
+					Level:        api.ActivityInfo,
+					Payload:      string(activityPayload),
+				})
+			} else {
+				assigneeEmail, err := common.GetUserEmail(request.Issue.Assignee)
+				if err != nil {
+					return nil, status.Errorf(codes.InvalidArgument, "failed to get user email from %v, error: %v", request.Issue.Assignee, err)
+				}
+				user, err := s.store.GetUser(ctx, &store.FindUserMessage{Email: &assigneeEmail})
+				if err != nil {
+					return nil, status.Errorf(codes.Internal, "failed to get user %v, error: %v", assigneeEmail, err)
+				}
+				if user == nil {
+					return nil, status.Errorf(codes.NotFound, "user %v not found", request.Issue.Assignee)
+				}
+				patch.UpdateAssignee = true
+				patch.Assignee = user
 
-			payload := &api.ActivityIssueFieldUpdatePayload{
-				FieldID:   api.IssueFieldAssignee,
-				OldValue:  strconv.Itoa(issue.Assignee.ID),
-				NewValue:  strconv.Itoa(user.ID),
-				IssueName: issue.Title,
+				payload := &api.ActivityIssueFieldUpdatePayload{
+					FieldID:   api.IssueFieldAssignee,
+					OldValue:  oldAssigneeID,
+					NewValue:  strconv.Itoa(user.ID),
+					IssueName: issue.Title,
+				}
+				activityPayload, err := json.Marshal(payload)
+				if err != nil {
+					return nil, status.Errorf(codes.Internal, "failed to marshal activity payload, error: %v", err)
+				}
+				activityCreates = append(activityCreates, &store.ActivityMessage{
+					CreatorUID:   principalID,
+					ContainerUID: issue.UID,
+					Type:         api.ActivityIssueFieldUpdate,
+					Level:        api.ActivityInfo,
+					Payload:      string(activityPayload),
+				})
 			}
-			activityPayload, err := json.Marshal(payload)
-			if err != nil {
-				return nil, status.Errorf(codes.Internal, "failed to marshal activity payload, error: %v", err)
-			}
-			activityCreates = append(activityCreates, &store.ActivityMessage{
-				CreatorUID:   principalID,
-				ContainerUID: issue.UID,
-				Type:         api.ActivityIssueFieldUpdate,
-				Level:        api.ActivityInfo,
-				Payload:      string(activityPayload),
-			})
 		}
 	}
 
@@ -1290,7 +1343,10 @@ func (s *IssueService) UpdateIssue(ctx context.Context, request *v1pb.UpdateIssu
 
 // BatchUpdateIssuesStatus batch updates issues status.
 func (s *IssueService) BatchUpdateIssuesStatus(ctx context.Context, request *v1pb.BatchUpdateIssuesStatusRequest) (*v1pb.BatchUpdateIssuesStatusResponse, error) {
-	principalID := ctx.Value(common.PrincipalIDContextKey).(int)
+	principalID, ok := ctx.Value(common.PrincipalIDContextKey).(int)
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "principal ID not found")
+	}
 
 	var issueIDs []int
 	var issues []*store.IssueMessage
@@ -1386,9 +1442,13 @@ func (s *IssueService) CreateIssueComment(ctx context.Context, request *v1pb.Cre
 		return nil, status.Errorf(codes.PermissionDenied, "permission denied")
 	}
 
-	// TODO: migrate to store v2
+	// TODO: migrate to store v2.
+	principalID, ok := ctx.Value(common.PrincipalIDContextKey).(int)
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "principal ID not found")
+	}
 	activityCreate := &store.ActivityMessage{
-		CreatorUID:   ctx.Value(common.PrincipalIDContextKey).(int),
+		CreatorUID:   principalID,
 		ContainerUID: issue.UID,
 		Type:         api.ActivityIssueCommentCreate,
 		Level:        api.ActivityInfo,
@@ -1444,7 +1504,10 @@ func (s *IssueService) UpdateIssueComment(ctx context.Context, request *v1pb.Upd
 		return nil, status.Errorf(codes.InvalidArgument, `invalid comment id "%s": %v`, request.IssueComment.Uid, err.Error())
 	}
 
-	principalID := ctx.Value(common.PrincipalIDContextKey).(int)
+	principalID, ok := ctx.Value(common.PrincipalIDContextKey).(int)
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "principal ID not found")
+	}
 	update := &store.UpdateActivityMessage{
 		UID:        activityUID,
 		CreatorUID: &principalID,
@@ -1593,7 +1656,7 @@ func convertToIssue(ctx context.Context, s *store.Store, issue *store.IssueMessa
 		Description:          issue.Description,
 		Type:                 convertToIssueType(issue.Type),
 		Status:               convertToIssueStatus(issue.Status),
-		Assignee:             fmt.Sprintf("%s%s", common.UserNamePrefix, issue.Assignee.Email),
+		Assignee:             "",
 		Approvers:            nil,
 		ApprovalTemplates:    nil,
 		ApprovalFindingDone:  false,
@@ -1612,6 +1675,9 @@ func convertToIssue(ctx context.Context, s *store.Store, issue *store.IssueMessa
 	}
 	if issue.PipelineUID != nil {
 		issueV1.Rollout = fmt.Sprintf("%s%s/%s%d", common.ProjectNamePrefix, issue.Project.ResourceID, common.RolloutPrefix, *issue.PipelineUID)
+	}
+	if issue.Assignee != nil {
+		issueV1.Assignee = fmt.Sprintf("%s%s", common.UserNamePrefix, issue.Assignee.Email)
 	}
 
 	for _, subscriber := range issue.Subscribers {
@@ -1803,8 +1869,51 @@ func getUserBelongingProjects(ctx context.Context, s *store.Store, userUID int) 
 	return projectIDs, nil
 }
 
+func isUserAtLeastProjectViewer(ctx context.Context, s *store.Store, requestProjectID string) (bool, error) {
+	principalID, ok := ctx.Value(common.PrincipalIDContextKey).(int)
+	if !ok {
+		return false, status.Errorf(codes.Internal, "principal ID not found")
+	}
+	user, err := s.GetUserByID(ctx, principalID)
+	if err != nil {
+		return false, errors.Wrapf(err, "failed to get user %d", principalID)
+	}
+
+	if isOwnerOrDBA(user.Role) {
+		return true, nil
+	}
+
+	policy, err := s.GetProjectPolicy(ctx, &store.GetProjectPolicyMessage{ProjectID: &requestProjectID})
+	if err != nil {
+		return false, errors.Wrapf(err, "failed to get project iam policy")
+	}
+
+	if isProjectOwnerDeveloperOrViewer(principalID, policy) {
+		return true, nil
+	}
+	return false, nil
+}
+
+// isProjectOwnerDeveloperOrViewer returns whether a principal is a project owner or developer in the project.
+func isProjectOwnerDeveloperOrViewer(principalID int, projectPolicy *store.IAMPolicyMessage) bool {
+	for _, binding := range projectPolicy.Bindings {
+		if binding.Role != api.Owner && binding.Role != api.Developer && binding.Role != api.ProjectViewer {
+			continue
+		}
+		for _, member := range binding.Members {
+			if member.ID == principalID || member.Email == api.AllUsers {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func isUserAtLeastProjectDeveloper(ctx context.Context, s *store.Store, requestProjectID string) (bool, error) {
-	principalID := ctx.Value(common.PrincipalIDContextKey).(int)
+	principalID, ok := ctx.Value(common.PrincipalIDContextKey).(int)
+	if !ok {
+		return false, status.Errorf(codes.Internal, "principal ID not found")
+	}
 	user, err := s.GetUserByID(ctx, principalID)
 	if err != nil {
 		return false, errors.Wrapf(err, "failed to get user %d", principalID)
@@ -1826,7 +1935,10 @@ func isUserAtLeastProjectDeveloper(ctx context.Context, s *store.Store, requestP
 }
 
 func isUserAtLeastProjectMember(ctx context.Context, s *store.Store, requestProjectID string) (bool, error) {
-	principalID := ctx.Value(common.PrincipalIDContextKey).(int)
+	principalID, ok := ctx.Value(common.PrincipalIDContextKey).(int)
+	if !ok {
+		return false, status.Errorf(codes.Internal, "principal ID not found")
+	}
 	user, err := s.GetUserByID(ctx, principalID)
 	if err != nil {
 		return false, errors.Wrapf(err, "failed to get user %d", principalID)
@@ -1848,8 +1960,14 @@ func isUserAtLeastProjectMember(ctx context.Context, s *store.Store, requestProj
 }
 
 func getProjectIDsFilter(ctx context.Context, s *store.Store, requestProjectID string) (*[]string, error) {
-	principalID := ctx.Value(common.PrincipalIDContextKey).(int)
-	role := ctx.Value(common.RoleContextKey).(api.Role)
+	principalID, ok := ctx.Value(common.PrincipalIDContextKey).(int)
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "principal ID not found")
+	}
+	role, ok := ctx.Value(common.RoleContextKey).(api.Role)
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "role not found")
+	}
 
 	if isOwnerOrDBA(role) {
 		if requestProjectID == "-" {

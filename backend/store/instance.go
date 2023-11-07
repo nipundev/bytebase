@@ -64,12 +64,16 @@ type FindInstanceMessage struct {
 func (s *Store) GetInstanceV2(ctx context.Context, find *FindInstanceMessage) (*InstanceMessage, error) {
 	if find.ResourceID != nil {
 		if instance, ok := s.instanceCache.Load(getInstanceCacheKey(*find.ResourceID)); ok {
-			return instance.(*InstanceMessage), nil
+			if v, ok := instance.(*InstanceMessage); ok {
+				return v, nil
+			}
 		}
 	}
 	if find.UID != nil {
 		if instance, ok := s.instanceIDCache.Load(*find.UID); ok {
-			return instance.(*InstanceMessage), nil
+			if v, ok := instance.(*InstanceMessage); ok {
+				return v, nil
+			}
 		}
 	}
 
@@ -531,15 +535,19 @@ func (s *Store) CheckActivationLimit(ctx context.Context, maximumActivation int)
 }
 
 func validateDataSourceList(dataSources []*DataSourceMessage) error {
-	dataSourceMap := map[api.DataSourceType]bool{}
+	dataSourceMap := map[string]bool{}
+	adminCount := 0
 	for _, dataSource := range dataSources {
-		if dataSourceMap[dataSource.Type] {
-			return status.Errorf(codes.InvalidArgument, "duplicate data source type %s", dataSource.Type)
+		if dataSourceMap[dataSource.ID] {
+			return status.Errorf(codes.InvalidArgument, "duplicate data source ID %s", dataSource.ID)
 		}
-		dataSourceMap[dataSource.Type] = true
+		dataSourceMap[dataSource.ID] = true
+		if dataSource.Type == api.Admin {
+			adminCount++
+		}
 	}
-	if !dataSourceMap[api.Admin] {
-		return status.Errorf(codes.InvalidArgument, "missing required data source type %s", api.Admin)
+	if adminCount != 1 {
+		return status.Errorf(codes.InvalidArgument, "require exactly one admin data source")
 	}
 	return nil
 }

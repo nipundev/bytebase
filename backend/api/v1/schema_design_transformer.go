@@ -14,7 +14,7 @@ import (
 
 	mysqlparser "github.com/bytebase/bytebase/backend/plugin/parser/mysql"
 	pgrawparser "github.com/bytebase/bytebase/backend/plugin/parser/sql/engine/pg"
-	pgSchemaEngine "github.com/bytebase/bytebase/backend/plugin/schema-engine/pg"
+	pgse "github.com/bytebase/bytebase/backend/plugin/schema-engine/pg"
 	v1pb "github.com/bytebase/bytebase/proto/generated-go/v1"
 )
 
@@ -25,7 +25,7 @@ func transformDatabaseMetadataToSchemaString(engine v1pb.Engine, database *v1pb.
 	case v1pb.Engine_TIDB:
 		return getTiDBDesignSchema("", database)
 	case v1pb.Engine_POSTGRES:
-		return pgSchemaEngine.GetDesignSchema("", database)
+		return pgse.GetDesignSchema("", database)
 	default:
 		return "", status.Errorf(codes.InvalidArgument, fmt.Sprintf("unsupported engine: %v", engine))
 	}
@@ -37,7 +37,7 @@ func transformSchemaStringToDatabaseMetadata(engine v1pb.Engine, schema string) 
 		case v1pb.Engine_MYSQL:
 			return parseMySQLSchemaStringToDatabaseMetadata(schema)
 		case v1pb.Engine_POSTGRES:
-			return pgSchemaEngine.ParseToMetadata(schema)
+			return pgse.ParseToMetadata(schema)
 		case v1pb.Engine_TIDB:
 			return parseTiDBSchemaStringToDatabaseMetadata(schema)
 		default:
@@ -522,8 +522,15 @@ func (c *columnState) toString(buf *strings.Builder) error {
 		}
 	}
 	if c.hasDefault {
-		if _, err := buf.WriteString(fmt.Sprintf(" DEFAULT %s", c.defaultValue.toString())); err != nil {
-			return err
+		// todo(zp): refactor column attribute.
+		if strings.EqualFold(c.defaultValue.toString(), "AUTO_INCREMENT") {
+			if _, err := buf.WriteString(fmt.Sprintf(" %s", c.defaultValue.toString())); err != nil {
+				return err
+			}
+		} else {
+			if _, err := buf.WriteString(fmt.Sprintf(" DEFAULT %s", c.defaultValue.toString())); err != nil {
+				return err
+			}
 		}
 	}
 	if c.comment != "" {
@@ -778,6 +785,11 @@ func (t *mysqlTransformer) EnterColumnDefinition(ctx *mysql.ColumnDefinitionCont
 			if comment != `''` && len(comment) > 2 {
 				columnState.comment = comment[1 : len(comment)-1]
 			}
+		// todo(zp): refactor column attribute.
+		case attribute.AUTO_INCREMENT_SYMBOL() != nil:
+			defaultValue := "auto_increment"
+			columnState.hasDefault = true
+			columnState.defaultValue = &defaultValueExpression{value: defaultValue}
 		}
 	}
 
@@ -799,7 +811,7 @@ func getDesignSchema(engine v1pb.Engine, baselineSchema string, to *v1pb.Databas
 		}
 		return result, nil
 	case v1pb.Engine_POSTGRES:
-		result, err := pgSchemaEngine.GetDesignSchema(baselineSchema, to)
+		result, err := pgse.GetDesignSchema(baselineSchema, to)
 		if err != nil {
 			return "", status.Errorf(codes.Internal, "failed to generate postgres design schema: %v", err)
 		}
@@ -1196,10 +1208,18 @@ func extractNewAttrs(column *columnState, attrs []mysql.IColumnAttributeContext)
 		})
 	}
 	if !defaultExists && column.hasDefault {
-		result = append(result, columnAttr{
-			text:  "DEFAULT " + column.defaultValue.toString(),
-			order: columnAttrOrder["DEFAULT"],
-		})
+		// todo(zp): refactor column attribute.
+		if strings.EqualFold(column.defaultValue.toString(), "AUTO_INCREMENT") {
+			result = append(result, columnAttr{
+				text:  column.defaultValue.toString(),
+				order: columnAttrOrder["DEFAULT"],
+			})
+		} else {
+			result = append(result, columnAttr{
+				text:  "DEFAULT " + column.defaultValue.toString(),
+				order: columnAttrOrder["DEFAULT"],
+			})
+		}
 	}
 	if !commentExists && column.comment != "" {
 		result = append(result, columnAttr{
@@ -1457,12 +1477,23 @@ func (g *mysqlDesignSchemaGenerator) EnterColumnDefinition(ctx *mysql.ColumnDefi
 					return
 				}
 			} else if column.hasDefault {
-				if _, err := g.columnDefine.WriteString(ctx.GetParser().GetTokenStream().GetTextFromInterval(antlr.Interval{
-					Start: startPos,
-					Stop:  defaultValueStart - 1,
-				})); err != nil {
-					g.err = err
-					return
+				// todo(zp): refactor column attribute.
+				if strings.EqualFold(column.defaultValue.toString(), "auto_increment") {
+					if _, err := g.columnDefine.WriteString(ctx.GetParser().GetTokenStream().GetTextFromInterval(antlr.Interval{
+						Start: startPos,
+						Stop:  attribute.DEFAULT_SYMBOL().GetSymbol().GetTokenIndex() - 1,
+					})); err != nil {
+						g.err = err
+						return
+					}
+				} else {
+					if _, err := g.columnDefine.WriteString(ctx.GetParser().GetTokenStream().GetTextFromInterval(antlr.Interval{
+						Start: startPos,
+						Stop:  defaultValueStart - 1,
+					})); err != nil {
+						g.err = err
+						return
+					}
 				}
 				if _, err := g.columnDefine.WriteString(column.defaultValue.toString()); err != nil {
 					g.err = err

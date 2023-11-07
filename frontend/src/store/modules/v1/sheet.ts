@@ -1,4 +1,5 @@
 import { isEqual, isUndefined } from "lodash-es";
+import Long from "long";
 import { defineStore } from "pinia";
 import { computed, ref, unref, watch, watchEffect } from "vue";
 import { sheetServiceClient } from "@/grpcweb";
@@ -224,12 +225,6 @@ export const useSheetV1Store = defineStore("sheet_v1", () => {
     sheetsByName.value.delete(name);
   };
 
-  // Other functions
-  const syncSheetFromVCS = async (parent: string) => {
-    await sheetServiceClient.syncSheets({
-      parent,
-    });
-  };
   const upsertSheetOrganizer = async (
     organizer: Pick<SheetOrganizer, "sheet" | "starred">
   ) => {
@@ -262,7 +257,6 @@ export const useSheetV1Store = defineStore("sheet_v1", () => {
     fetchStarredSheetList,
     patchSheet,
     deleteSheetByName,
-    syncSheetFromVCS,
     upsertSheetOrganizer,
   };
 });
@@ -297,7 +291,7 @@ export const useSheetAndTabStore = defineStore("sheet_and_tab", () => {
 
     // Incomplete sheets should be read-only. e.g. 100MB sheet from issue task.、
     const statement = getSheetStatement(sheet);
-    if (statement.length !== sheet.contentSize) {
+    if (Long.fromNumber(statement.length).ne(sheet.contentSize)) {
       return true;
     }
 
@@ -326,12 +320,6 @@ const getUpdateMaskForSheet = (
     !isEqual(origin.visibility, update.visibility)
   ) {
     updateMask.push("visibility");
-  }
-  if (
-    !isUndefined(update.payload) &&
-    !isEqual(origin.payload, update.payload)
-  ) {
-    updateMask.push("payload");
   }
   return updateMask;
 };
