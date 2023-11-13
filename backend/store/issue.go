@@ -81,8 +81,6 @@ type FindIssueMessage struct {
 	ProjectIDs *[]string
 	PlanUID    *int64
 	PipelineID *int
-	// Find issues where principalID is either creator, assignee or subscriber.
-	PrincipalID *int
 	// To support pagination, we add into creator, assignee and subscriber.
 	// Only principleID or one of the following three fields can be set.
 	CreatorID       *int
@@ -107,17 +105,13 @@ type FindIssueMessage struct {
 // GetIssueV2 gets issue by issue UID.
 func (s *Store) GetIssueV2(ctx context.Context, find *FindIssueMessage) (*IssueMessage, error) {
 	if find.UID != nil {
-		if issue, ok := s.issueCache.Load(*find.UID); ok {
-			if v, ok := issue.(*IssueMessage); ok {
-				return v, nil
-			}
+		if v, ok := s.issueCache.Get(*find.UID); ok {
+			return v, nil
 		}
 	}
 	if find.PipelineID != nil {
-		if issue, ok := s.issueByPipelineCache.Load(*find.PipelineID); ok {
-			if v, ok := issue.(*IssueMessage); ok {
-				return v, nil
-			}
+		if v, ok := s.issueByPipelineCache.Get(*find.PipelineID); ok {
+			return v, nil
 		}
 	}
 
@@ -133,8 +127,10 @@ func (s *Store) GetIssueV2(ctx context.Context, find *FindIssueMessage) (*IssueM
 	}
 	issue := issues[0]
 
-	s.issueCache.Store(issue.UID, issue)
-	s.issueByPipelineCache.Store(issue.PipelineUID, issue)
+	s.issueCache.Add(issue.UID, issue)
+	if issue.PipelineUID != nil {
+		s.issueByPipelineCache.Add(*issue.PipelineUID, issue)
+	}
 	return issue, nil
 }
 
@@ -213,8 +209,10 @@ func (s *Store) CreateIssueV2(ctx context.Context, create *IssueMessage, creator
 		return nil, err
 	}
 
-	s.issueCache.Store(create.UID, create)
-	s.issueByPipelineCache.Store(create.PipelineUID, create)
+	s.issueCache.Add(create.UID, create)
+	if create.PipelineUID != nil {
+		s.issueByPipelineCache.Add(*create.PipelineUID, create)
+	}
 	return create, nil
 }
 
@@ -296,8 +294,10 @@ func (s *Store) UpdateIssueV2(ctx context.Context, uid int, patch *UpdateIssueMe
 	}
 
 	// Invalid the cache and read the value again.
-	s.issueCache.Delete(uid)
-	s.issueByPipelineCache.Delete(oldIssue.PipelineUID)
+	s.issueCache.Remove(uid)
+	if oldIssue.PipelineUID != nil {
+		s.issueByPipelineCache.Remove(*oldIssue.PipelineUID)
+	}
 	return s.GetIssueV2(ctx, &FindIssueMessage{UID: &uid})
 }
 
@@ -394,15 +394,6 @@ func (s *Store) ListIssueV2(ctx context.Context, find *FindIssueMessage) ([]*Iss
 	}
 	if v := find.DatabaseUID; v != nil {
 		where, args = append(where, fmt.Sprintf("EXISTS (SELECT 1 FROM task WHERE task.pipeline_id = issue.pipeline_id AND task.database_id = $%d)", len(args)+1)), append(args, *v)
-	}
-	if v := find.PrincipalID; v != nil {
-		if find.CreatorID != nil || find.AssigneeID != nil || find.SubscriberID != nil {
-			return nil, &common.Error{Code: common.Invalid, Err: errors.New("principal_id cannot be used with creator_id, assignee_id, or subscriber_id")}
-		}
-		where = append(where, fmt.Sprintf("(issue.creator_id = $%d OR issue.assignee_id = $%d OR EXISTS (SELECT 1 FROM issue_subscriber WHERE issue_subscriber.issue_id = issue.id AND issue_subscriber.subscriber_id = $%d))", len(args)+1, len(args)+2, len(args)+3))
-		args = append(args, *v)
-		args = append(args, *v)
-		args = append(args, *v)
 	}
 	if v := find.CreatorID; v != nil {
 		where, args = append(where, fmt.Sprintf("issue.creator_id = $%d", len(args)+1)), append(args, *v)
@@ -561,8 +552,10 @@ func (s *Store) ListIssueV2(ctx context.Context, find *FindIssueMessage) ([]*Iss
 		issue.CreatedTime = time.Unix(issue.createdTs, 0)
 		issue.UpdatedTime = time.Unix(issue.updatedTs, 0)
 
-		s.issueCache.Store(issue.UID, issue)
-		s.issueByPipelineCache.Store(issue.PipelineUID, issue)
+		s.issueCache.Add(issue.UID, issue)
+		if issue.PipelineUID != nil {
+			s.issueByPipelineCache.Add(*issue.PipelineUID, issue)
+		}
 	}
 
 	return issues, nil
@@ -607,7 +600,7 @@ func (s *Store) BatchUpdateIssueStatuses(ctx context.Context, issueUIDs []int, s
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return errors.Wrapf(err, "failed to scan")
+		return errors.Wrapf(err, "failed to scan issues")
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -615,10 +608,10 @@ func (s *Store) BatchUpdateIssueStatuses(ctx context.Context, issueUIDs []int, s
 	}
 
 	for _, issueID := range issueIDs {
-		s.issueCache.Delete(issueID)
+		s.issueCache.Remove(issueID)
 	}
 	for _, pipelineID := range pipelineIDs {
-		s.issueByPipelineCache.Delete(pipelineID)
+		s.issueByPipelineCache.Remove(pipelineID)
 	}
 
 	return nil

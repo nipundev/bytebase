@@ -50,7 +50,7 @@
     </div>
 
     <DatabaseOperations
-      v-if="selectedDatabases.length > 0"
+      v-if="selectedDatabases.length > 0 || isStandaloneMode"
       class="mb-3"
       :databases="selectedDatabases"
       @dismiss="state.selectedDatabaseIds.clear()"
@@ -110,7 +110,6 @@
 
 <script lang="ts" setup>
 import { NInputGroup, NTooltip } from "naive-ui";
-import { storeToRefs } from "pinia";
 import { computed, watchEffect, onMounted, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
@@ -121,11 +120,11 @@ import {
 } from "@/components/v2";
 import { isDatabase } from "@/components/v2/Model/DatabaseV1Table/utils";
 import {
-  useActuatorV1Store,
   useCurrentUserV1,
   useDBGroupStore,
   useDatabaseV1Store,
   useEnvironmentV1Store,
+  usePageMode,
   usePolicyV1Store,
   useProjectV1ListByCurrentUser,
   useUIStateStore,
@@ -148,7 +147,6 @@ import {
   UNKNOWN_USER_NAME,
   ComposedDatabase,
   ComposedDatabaseGroup,
-  DEFAULT_PROJECT_V1_NAME,
 } from "../types";
 
 interface LocalState {
@@ -164,8 +162,7 @@ const router = useRouter();
 const uiStateStore = useUIStateStore();
 const environmentV1Store = useEnvironmentV1Store();
 const { projectList } = useProjectV1ListByCurrentUser();
-const actuatorStore = useActuatorV1Store();
-const { pageMode } = storeToRefs(actuatorStore);
+const pageMode = usePageMode();
 
 const state = reactive<LocalState>({
   instanceFilter: String(UNKNOWN_ID),
@@ -270,11 +267,9 @@ const changeSearchText = (searchText: string) => {
 };
 
 const filteredDatabaseList = computed(() => {
-  let list = databaseV1List.value
-    .filter((database) => database.project !== DEFAULT_PROJECT_V1_NAME)
-    .filter((database) =>
-      isDatabaseV1Accessible(database, currentUserV1.value)
-    );
+  let list = databaseV1List.value.filter((database) =>
+    isDatabaseV1Accessible(database, currentUserV1.value)
+  );
   const environment = selectedEnvironment.value;
   if (environment && environment.name !== UNKNOWN_ENVIRONMENT_NAME) {
     list = list.filter((db) => db.effectiveEnvironment === environment.name);
@@ -324,9 +319,9 @@ const getAllSelectionState = (
     isDatabase(db)
   ) as ComposedDatabase[];
 
-  const checked = filteredDatabases.every((db) =>
-    state.selectedDatabaseIds.has(db.uid)
-  );
+  const checked =
+    state.selectedDatabaseIds.size > 0 &&
+    filteredDatabases.every((db) => state.selectedDatabaseIds.has(db.uid));
   const indeterminate =
     !checked &&
     filteredDatabases.some((db) => state.selectedDatabaseIds.has(db.uid));
