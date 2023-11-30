@@ -1,11 +1,13 @@
 <template>
-  <div class="space-y-2">
-    <div class="flex items-center justify-between">
+  <div class="space-y-4">
+    <div
+      class="flex flex-col md:flex-row md:items-center justify-between gap-y-2"
+    >
       <div>
         <LevelFilter v-if="!hideLevelFilter" />
       </div>
 
-      <div class="flex items-center justify-end gap-x-4">
+      <div class="flex items-center justify-end gap-x-2">
         <NInput
           v-if="!hideSearch"
           v-model:value="search"

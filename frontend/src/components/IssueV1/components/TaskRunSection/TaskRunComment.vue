@@ -68,11 +68,40 @@ const comment = computed(() => {
     if (taskRun.executionStatus === TaskRun_ExecutionStatus.PRE_EXECUTING) {
       return t("task-run.status.dumping-schema-before-executing-sql");
     } else if (taskRun.executionStatus === TaskRun_ExecutionStatus.EXECUTING) {
+      if (taskRun.executionDetail) {
+        return t("task-run.status.executing-sql-detail", {
+          current: taskRun.executionDetail.commandsCompleted + 1,
+          total: taskRun.executionDetail.commandsTotal,
+          startLine:
+            (taskRun.executionDetail.commandStartPosition?.line ?? 0) + 1,
+          startColumn:
+            (taskRun.executionDetail.commandStartPosition?.column ?? 0) + 1,
+          endLine: (taskRun.executionDetail.commandEndPosition?.line ?? 0) + 1,
+          endColumn:
+            (taskRun.executionDetail.commandEndPosition?.column ?? 0) + 1,
+        });
+      }
       return t("task-run.status.executing-sql");
     } else if (
       taskRun.executionStatus === TaskRun_ExecutionStatus.POST_EXECUTING
     ) {
       return t("task-run.status.dumping-schema-after-executing-sql");
+    }
+  } else if (taskRun.status === TaskRun_Status.FAILED) {
+    if (
+      taskRun.executionDetail?.commandStartPosition &&
+      taskRun.executionDetail?.commandEndPosition
+    ) {
+      return t("task-run.status.failed-sql-detail", {
+        startLine:
+          (taskRun.executionDetail.commandStartPosition?.line ?? 0) + 1,
+        startColumn:
+          (taskRun.executionDetail.commandStartPosition?.column ?? 0) + 1,
+        endLine: (taskRun.executionDetail.commandEndPosition?.line ?? 0) + 1,
+        endColumn:
+          (taskRun.executionDetail.commandEndPosition?.column ?? 0) + 1,
+        message: taskRun.detail,
+      });
     }
   }
   return taskRun.detail;
@@ -90,7 +119,7 @@ const commentLink = computed((): CommentLink => {
       case Task_Type.DATABASE_SCHEMA_BASELINE:
       case Task_Type.DATABASE_SCHEMA_UPDATE:
       case Task_Type.DATABASE_SCHEMA_UPDATE_SDL:
-      case Task_Type.DATABASE_SCHEMA_UPDATE_GHOST_SYNC:
+      case Task_Type.DATABASE_SCHEMA_UPDATE_GHOST_CUTOVER:
       case Task_Type.DATABASE_DATA_UPDATE: {
         const db = databaseForTask(issue.value, task);
         const link = changeHistoryLinkRaw(

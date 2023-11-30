@@ -1,5 +1,5 @@
 import { useLocalStorage } from "@vueuse/core";
-import { cloneDeep, head, orderBy, uniqBy } from "lodash-es";
+import { cloneDeep, head, isFunction, orderBy, uniqBy } from "lodash-es";
 import { defineStore } from "pinia";
 import { v4 as uuidv4 } from "uuid";
 import { computed, reactive, ref, watch } from "vue";
@@ -25,9 +25,11 @@ import {
   LeafTreeNodeTypes,
   Connection,
   DEFAULT_PROJECT_V1_NAME,
+  RichViewMetadata,
+  TextTarget,
+  RichPartitionTableMetadata,
 } from "@/types";
 import { Environment } from "@/types/proto/v1/environment_service";
-import { Policy } from "@/types/proto/v1/org_policy_service";
 import { emptyConnection, getSemanticLabelValue, groupBy } from "@/utils";
 import { useTabStore } from "./tab";
 import {
@@ -39,14 +41,13 @@ import {
 } from "./v1";
 
 export const ROOT_NODE_ID = "ROOT";
-// export const SQL_EDITOR_TREE_NODE_ID_DELIMITER = "->";
 
-const defaultFactorList = (): StatefulFactor[] => [
-  {
-    factor: "project",
-    disabled: false,
-  },
-];
+const defaultProjectFactor: StatefulFactor = {
+  factor: "project",
+  disabled: false,
+};
+
+const defaultFactorList = (): StatefulFactor[] => [defaultProjectFactor];
 
 const factorListInLocalStorage = useLocalStorage<StatefulFactor[]>(
   "bb.sql-editor.tree-factor-list",
@@ -84,17 +85,33 @@ const factorListInLocalStorage = useLocalStorage<StatefulFactor[]>(
 export const useSQLEditorTreeStore = defineStore("SQL-Editor-Tree", () => {
   const nodeListMapById = reactive(new Map<string, TreeNode[]>());
   // states
-  const accessControlPolicyList = ref<Policy[]>([]);
   const databaseList = ref<ComposedDatabase[]>([]);
   const factorList = ref<StatefulFactor[]>(
     cloneDeep(factorListInLocalStorage.value)
   );
-  const filteredFactorList = computed(() => {
-    return factorList.value.filter((sf) => !sf.disabled).map((sf) => sf.factor);
+  const filteredDatabaseList = computed(() => {
+    if (projectMode.value) {
+      return databaseList.value.filter((database) => {
+        return database.project === selectedProject.value?.name;
+      });
+    }
+
+    return databaseList.value;
   });
+  const filteredFactorList = computed(() => {
+    return factorList.value
+      .filter((sf) =>
+        projectMode.value ? sf.factor !== defaultProjectFactor.factor : true
+      )
+      .filter((sf) => !sf.disabled)
+      .map((sf) => sf.factor);
+  });
+  const selectedProject = ref<ComposedProject>();
   const state = ref<TreeState>("UNSET");
   const expandedKeys = ref<string[]>([]); // mixed factor type
   const tree = ref<TreeNode[]>([]);
+
+  const projectMode = computed(() => Boolean(selectedProject.value));
 
   const collectNode = <T extends NodeType>(node: TreeNode<T>) => {
     const { type, target } = node.meta;
@@ -132,7 +149,10 @@ export const useSQLEditorTreeStore = defineStore("SQL-Editor-Tree", () => {
   };
   const buildTree = () => {
     nodeListMapById.clear();
-    tree.value = buildTreeImpl(databaseList.value, filteredFactorList.value);
+    tree.value = buildTreeImpl(
+      filteredDatabaseList.value,
+      filteredFactorList.value
+    );
     const openingDatabaseList = resolveOpeningDatabaseListFromTabList();
     const keys = new Set<string>();
     // Recursively expand opening databases' parent nodes
@@ -163,7 +183,10 @@ export const useSQLEditorTreeStore = defineStore("SQL-Editor-Tree", () => {
   ): Promise<Connection> => {
     try {
       const [db, _] = await Promise.all([
-        useDatabaseV1Store().getOrFetchDatabaseByUID(databaseId),
+        useDatabaseV1Store().getOrFetchDatabaseByUID(
+          databaseId,
+          true /* silent */
+        ),
         useInstanceV1Store().getOrFetchInstanceByUID(instanceId),
       ]);
       await useDBSchemaV1Store().getOrFetchTableList(db.name);
@@ -193,8 +216,8 @@ export const useSQLEditorTreeStore = defineStore("SQL-Editor-Tree", () => {
     }
   };
   const cleanup = () => {
-    accessControlPolicyList.value = [];
     databaseList.value = [];
+    selectedProject.value = undefined;
     tree.value = [];
     expandedKeys.value = [];
     factorList.value = defaultFactorList();
@@ -212,12 +235,13 @@ export const useSQLEditorTreeStore = defineStore("SQL-Editor-Tree", () => {
 
   return {
     expandedKeys,
-    accessControlPolicyList,
     databaseList,
     factorList,
     filteredFactorList,
+    selectedProject,
     state,
     tree,
+    projectMode,
     collectNode,
     nodesByTarget,
     expandNodes,
@@ -324,9 +348,24 @@ export const idForSQLEditorTreeNodeTarget = <T extends NodeType>(
       table.name
     }`;
   }
+  if (type === "partition-table") {
+    const { database, schema, table, partition } =
+      target as RichPartitionTableMetadata;
+    return `${database.name}/schemas/${schema.name || "-"}/tables/${
+      table.name
+    }/partitions/${partition.name}`;
+  }
+  if (type === "view") {
+    const { database, schema, view } = target as RichViewMetadata;
+    return `${database.name}/schemas/${schema.name || "-"}/views/${view.name}`;
+  }
   if (type === "label") {
     const kv = target as NodeTarget<"label">;
     return `labels/${kv.key}:${kv.value}`;
+  }
+  if (type === "expandable-text") {
+    const { text, type } = target as NodeTarget<"expandable-text">;
+    return `texts-${type}/${typeof text === "function" ? text() : text}`;
   }
   if (type === "dummy") {
     const dummyType = (target as NodeTarget<"dummy">).type;
@@ -352,7 +391,7 @@ const buildSubTree = (
     });
   }
 
-  // group (project, instance, project, label) nodes
+  // group (project, instance, environment, label) nodes
   const nodes: TreeNode[] = [];
   const factor = factorList[factorIndex];
 
@@ -465,7 +504,7 @@ export const mapTreeNodeByType = <T extends NodeType>(
     meta: { type, target },
     parent,
     label: readableTargetByType(type, target),
-    isLeaf: LeafTreeNodeTypes.includes(type),
+    isLeaf: isLeafNodeType(type),
     ...overrides,
   };
 
@@ -496,11 +535,26 @@ const readableTargetByType = <T extends NodeType>(
   if (type === "table") {
     return (target as RichTableMetadata).table.name;
   }
+  if (type === "partition-table") {
+    return (target as RichPartitionTableMetadata).partition.name;
+  }
+  if (type === "view") {
+    return (target as RichViewMetadata).view.name;
+  }
+  if (type === "expandable-text") {
+    const { text, searchable } = target as TextTarget<true>;
+    if (!searchable) return "";
+    return isFunction(text) ? text() : text;
+  }
   if (type === "dummy") {
     // Use empty strings for dummy nodes to make them unsearchable
     return "";
   }
   return (target as NodeTarget<"label">).value;
+};
+
+const isLeafNodeType = (type: NodeType) => {
+  return LeafTreeNodeTypes.includes(type);
 };
 
 const getSemanticFactorValue = (db: ComposedDatabase, factor: Factor) => {

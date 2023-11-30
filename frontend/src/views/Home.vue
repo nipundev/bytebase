@@ -1,144 +1,82 @@
 <template>
   <div class="flex flex-col">
-    <div class="px-2 flex items-center">
-      <div class="flex-1 overflow-hidden">
-        <TabFilter v-model:value="tab" :items="tabItemList" />
+    <IssueSearch
+      v-model:params="state.params"
+      :components="
+        state.advanced ? ['searchbox', 'status', 'time-range'] : ['status']
+      "
+      :component-props="{ status: { disabled: statusTabDisabled } }"
+      class="px-4 py-2 gap-y-1"
+    >
+      <template v-if="!state.advanced" #default>
+        <div class="h-[34px] flex items-center gap-x-2">
+          <div class="flex-1 overflow-auto">
+            <TabFilter
+              :value="tab"
+              :items="tabItemList"
+              @update:value="selectTab($event as TabValue)"
+            />
+          </div>
+          <div class="flex items-center">
+            <div
+              class="flex items-center gap-x-1 normal-link whitespace-nowrap text-sm"
+              @click="toggleAdvancedSearch(true)"
+            >
+              <SearchIcon class="w-4 h-4" />
+              <span class="hidden md:block">
+                {{ $t("issue.advanced-search.self") }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </template>
+      <template v-if="state.advanced" #searchbox-suffix>
+        <NTooltip>
+          <template #trigger>
+            <NButton
+              style="--n-padding: 0 6px; --n-icon-size: 24px"
+              @click="toggleAdvancedSearch(false)"
+            >
+              <template #icon>
+                <ChevronDownIcon class="w-5 h-5" />
+              </template>
+            </NButton>
+          </template>
+          <template #default>
+            <div class="whitespace-nowrap">
+              {{ $t("issue.advanced-search.hide") }}
+            </div>
+          </template>
+        </NTooltip>
+      </template>
+    </IssueSearch>
+
+    <div class="relative min-h-[20rem]">
+      <div
+        v-if="state.loading && !state.loadingMore"
+        class="absolute inset-0 bg-white/50 pt-[10rem] flex flex-col items-center"
+      >
+        <BBSpin />
       </div>
-      <div class="flex items-center space-x-2 p-0.5">
-        <router-link
-          :to="issueLink"
-          class="flex space-x-1 items-center normal-link !whitespace-nowrap"
-        >
-          <heroicons-outline:search class="h-4 w-4" />
-          <span class="hidden md:block">{{
-            $t("issue.advanced-search.self")
-          }}</span>
-        </router-link>
-      </div>
-    </div>
-    <div v-show="tab === 'APPROVAL_REQUESTED'" class="mt-2">
-      <PagedIssueTableV1
-        v-if="hasCustomApprovalFeature"
-        session-key="home-waiting-approval"
-        :issue-filter="{
-          ...commonIssueFilter,
-          statusList: [IssueStatus.OPEN],
-        }"
-        :ui-issue-filter="{
-          approver: `users/${currentUserV1.email}`,
-          approval: 'pending',
-        }"
-      >
-        <template #table="{ issueList, loading }">
-          <IssueTableV1
-            class="border-x-0"
-            :show-placeholder="!loading"
-            :issue-list="issueList"
-            title=""
-          />
-        </template>
-      </PagedIssueTableV1>
-    </div>
 
-    <div v-show="tab === 'WAITING_ROLLOUT'" class="mt-2">
-      <!-- show OPEN Assigned issues with pageSize=10 -->
       <PagedIssueTableV1
-        session-key="home-assigned"
-        :issue-filter="{
-          ...commonIssueFilter,
-          statusList: [IssueStatus.OPEN],
-          assignee: `${userNamePrefix}${currentUserV1.email}`,
-        }"
-        :ui-issue-filter="{
-          approval: 'approved',
-        }"
-        :page-size="OPEN_ISSUE_LIST_PAGE_SIZE"
+        :key="keyForTab(tab)"
+        v-model:loading="state.loading"
+        v-model:loading-more="state.loadingMore"
+        :session-key="keyForTab(tab)"
+        :issue-filter="mergedIssueFilter"
+        :ui-issue-filter="mergedUIIssueFilter"
+        :page-size="50"
       >
         <template #table="{ issueList, loading }">
           <IssueTableV1
             class="border-x-0"
             :show-placeholder="!loading"
             :issue-list="issueList"
-            title=""
+            :highlight-text="state.params.query"
           />
         </template>
       </PagedIssueTableV1>
-    </div>
-
-    <div v-show="tab === 'CREATED'" class="mt-2">
-      <!-- show OPEN Created issues with pageSize=10 -->
-      <PagedIssueTableV1
-        session-key="home-created"
-        :issue-filter="{
-          ...commonIssueFilter,
-          statusList: [IssueStatus.OPEN],
-          creator: `${userNamePrefix}${currentUserV1.email}`,
-        }"
-        :page-size="OPEN_ISSUE_LIST_PAGE_SIZE"
-      >
-        <template #table="{ issueList, loading }">
-          <IssueTableV1
-            class="border-x-0"
-            :show-placeholder="!loading"
-            :issue-list="issueList"
-            title=""
-          />
-        </template>
-      </PagedIssueTableV1>
-    </div>
-
-    <div v-show="tab === 'SUBSCRIBED'" class="mt-2">
-      <!-- show OPEN Subscribed issues with pageSize=10 -->
-      <PagedIssueTableV1
-        session-key="home-subscribed"
-        :issue-filter="{
-          ...commonIssueFilter,
-          statusList: [IssueStatus.OPEN],
-          subscriber: `${userNamePrefix}${currentUserV1.email}`,
-        }"
-        :page-size="OPEN_ISSUE_LIST_PAGE_SIZE"
-      >
-        <template #table="{ issueList, loading }">
-          <IssueTableV1
-            class="border-x-0"
-            :show-placeholder="!loading"
-            :issue-list="issueList"
-            title=""
-          />
-        </template>
-      </PagedIssueTableV1>
-    </div>
-
-    <div v-show="tab === 'RECENTLY_CLOSED'" class="mt-2">
-      <!-- show the first 5 DONE or CANCELED issues -->
-      <!-- But won't show "Load more", since we have a "View all closed" link below -->
-      <PagedIssueTableV1
-        session-key="home-closed"
-        :issue-filter="{
-          ...commonIssueFilter,
-          statusList: [IssueStatus.DONE, IssueStatus.CANCELED],
-          principal: `${userNamePrefix}${currentUserV1.email}`,
-        }"
-        :page-size="MAX_CLOSED_ISSUE"
-        :hide-load-more="true"
-      >
-        <template #table="{ issueList, loading }">
-          <IssueTableV1
-            class="border-x-0"
-            :show-placeholder="!loading"
-            :issue-list="issueList"
-            title=""
-          />
-        </template>
-      </PagedIssueTableV1>
-      <div class="w-full flex justify-end mt-2 px-4">
-        <router-link
-          :to="`/issue?status=closed&user=${currentUserUID}`"
-          class="normal-link"
-        >
-          {{ $t("project.overview.view-all-closed") }}
-        </router-link>
-      </div>
     </div>
   </div>
 
@@ -207,49 +145,95 @@
 
 <script lang="ts" setup>
 import { useLocalStorage } from "@vueuse/core";
+import { cloneDeep } from "lodash-es";
+import { ChevronDownIcon, SearchIcon } from "lucide-vue-next";
+import { NButton, NTooltip } from "naive-ui";
 import { reactive, computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { useRoute, useRouter } from "vue-router";
+import { IssueSearch } from "@/components/IssueV1/components";
 import IssueTableV1 from "@/components/IssueV1/components/IssueTableV1.vue";
 import PagedIssueTableV1 from "@/components/IssueV1/components/PagedIssueTableV1.vue";
 import { TabFilter, TabFilterItem } from "@/components/v2";
 import {
   useSubscriptionV1Store,
   useOnboardingStateStore,
-  featureToRef,
   useCurrentUserV1,
 } from "@/store";
-import { userNamePrefix } from "@/store/modules/v1/common";
-import { IssueStatus } from "@/types/proto/v1/issue_service";
-import { IssueFilter, planTypeToString } from "../types";
-import { extractUserUID } from "../utils";
+import { planTypeToString } from "@/types";
+import {
+  SearchParams,
+  SearchScopeId,
+  buildIssueFilterBySearchParams,
+  buildSearchParamsBySearchText,
+  buildSearchTextBySearchParams,
+  buildUIIssueFilterBySearchParams,
+  getValueFromSearchParams,
+  upsertScope,
+} from "@/utils";
 
 const TABS = [
   "CREATED",
+  "ASSIGNED",
   "APPROVAL_REQUESTED",
   "WAITING_ROLLOUT",
   "SUBSCRIBED",
-  "RECENTLY_CLOSED",
+  "ALL",
+  "",
 ] as const;
 
 type TabValue = typeof TABS[number];
 
 interface LocalState {
+  loading: boolean;
+  loadingMore: boolean;
+  params: SearchParams;
+  advanced: boolean;
   showTrialStartModal: boolean;
 }
-
-const OPEN_ISSUE_LIST_PAGE_SIZE = 50;
-const MAX_CLOSED_ISSUE = 50;
 
 const { t } = useI18n();
 const subscriptionStore = useSubscriptionV1Store();
 const onboardingStateStore = useOnboardingStateStore();
-const tab = useLocalStorage<TabValue>(
+const me = useCurrentUserV1();
+const route = useRoute();
+const router = useRouter();
+
+const defaultSearchParams = () => {
+  const params: SearchParams = {
+    query: "",
+    scopes: [
+      {
+        id: "status",
+        value: "OPEN",
+      },
+    ],
+  };
+  return params;
+};
+const defaultScopeIds = computed(() => {
+  return new Set(defaultSearchParams().scopes.map((s) => s.id));
+});
+const tabItemList = computed((): TabFilterItem<TabValue>[] => {
+  return [
+    { value: "CREATED", label: t("common.created") },
+    { value: "ASSIGNED", label: t("common.assigned") },
+    {
+      value: "APPROVAL_REQUESTED",
+      label: t("issue.approval-requested"),
+    },
+    { value: "WAITING_ROLLOUT", label: t("issue.waiting-rollout") },
+    { value: "SUBSCRIBED", label: t("common.subscribed") },
+    { value: "ALL", label: t("common.all") },
+  ];
+});
+const storedTab = useLocalStorage<TabValue>(
   "bb.home.issue-list-tab",
-  "APPROVAL_REQUESTED",
+  tabItemList.value[0].value,
   {
     serializer: {
       read(raw: TabValue) {
-        if (!TABS.includes(raw)) return "APPROVAL_REQUESTED";
+        if (!TABS.includes(raw)) return tabItemList.value[0].value;
         return raw;
       },
       write(value) {
@@ -258,28 +242,157 @@ const tab = useLocalStorage<TabValue>(
     },
   }
 );
+const keyForTab = (tab: TabValue) => {
+  if (tab === "CREATED") return "my-issues-created";
+  if (tab === "ASSIGNED") return "my-issues-assigned";
+  if (tab === "APPROVAL_REQUESTED") return "my-issues-approval-requested";
+  if (tab === "WAITING_ROLLOUT") return "my-issues-waiting-rollout";
+  if (tab === "SUBSCRIBED") return "my-issues-subscribed";
+  if (tab === "ALL") return "my-issues-all";
+
+  return "my-issues-unknown";
+};
+const mergeSearchParamsByTab = (params: SearchParams, tab: TabValue) => {
+  const common = cloneDeep(params);
+  if (tab === "" || tab === "ALL") {
+    return common;
+  }
+
+  const myEmail = me.value.email;
+  if (tab === "CREATED") {
+    return upsertScope(common, {
+      id: "creator",
+      value: myEmail,
+    });
+  }
+  if (tab === "ASSIGNED") {
+    return upsertScope(common, {
+      id: "assignee",
+      value: myEmail,
+    });
+  }
+  if (tab === "SUBSCRIBED") {
+    return upsertScope(common, {
+      id: "subscriber",
+      value: myEmail,
+    });
+  }
+  if (tab === "APPROVAL_REQUESTED") {
+    return upsertScope(common, [
+      {
+        id: "status",
+        value: "OPEN",
+      },
+      {
+        id: "approval",
+        value: "pending",
+      },
+      {
+        id: "approver",
+        value: myEmail,
+      },
+    ]);
+  }
+  if (tab === "WAITING_ROLLOUT") {
+    return upsertScope(common, [
+      {
+        id: "status",
+        value: "OPEN",
+      },
+      {
+        id: "approval",
+        value: "approved",
+      },
+      {
+        id: "releaser",
+        value: myEmail,
+      },
+    ]);
+  }
+  console.error("[mergeSearchParamsByTab] should never reach this line", tab);
+  return common;
+};
+const guessTabValueFromSearchParams = (params: SearchParams): TabValue => {
+  const myEmail = me.value.email;
+
+  const verifyScopes = (scopes: SearchScopeId[]) => {
+    const allowed = new Set([...scopes]);
+    return params.scopes.every(
+      (s) => allowed.has(s.id) || defaultScopeIds.value.has(s.id)
+    );
+  };
+
+  if (
+    verifyScopes(["creator"]) &&
+    getValueFromSearchParams(params, "creator") === myEmail
+  ) {
+    return "CREATED";
+  }
+  if (
+    verifyScopes(["assignee"]) &&
+    getValueFromSearchParams(params, "assignee") === myEmail
+  ) {
+    return "ASSIGNED";
+  }
+  if (
+    verifyScopes(["subscriber"]) &&
+    getValueFromSearchParams(params, "subscriber") === myEmail
+  ) {
+    return "SUBSCRIBED";
+  }
+  if (
+    verifyScopes(["approval", "approver"]) &&
+    getValueFromSearchParams(params, "status") === "OPEN" &&
+    getValueFromSearchParams(params, "approval") === "pending" &&
+    getValueFromSearchParams(params, "approver") === myEmail
+  ) {
+    return "APPROVAL_REQUESTED";
+  }
+  if (
+    verifyScopes(["approval", "releaser"]) &&
+    getValueFromSearchParams(params, "status") === "OPEN" &&
+    getValueFromSearchParams(params, "approval") === "approved" &&
+    getValueFromSearchParams(params, "releaser") === myEmail
+  ) {
+    return "WAITING_ROLLOUT";
+  }
+
+  if (params.scopes.every((s) => defaultScopeIds.value.has(s.id))) {
+    return "ALL";
+  }
+  return "";
+};
+const initializeSearchParamsFromQueryOrLocalStorage = () => {
+  const { qs } = route.query;
+  if (typeof qs === "string" && qs.length > 0) {
+    return {
+      params: buildSearchParamsBySearchText(qs),
+      advanced: true,
+    };
+  }
+  return {
+    params: mergeSearchParamsByTab(defaultSearchParams(), storedTab.value),
+    advanced: false,
+  };
+};
 
 const state = reactive<LocalState>({
+  loading: false,
+  loadingMore: false,
+  ...initializeSearchParamsFromQueryOrLocalStorage(),
   showTrialStartModal: false,
 });
 
-const currentUserV1 = useCurrentUserV1();
-const currentUserUID = computed(() => extractUserUID(currentUserV1.value.name));
-const hasCustomApprovalFeature = featureToRef("bb.feature.custom-approval");
-
-const tabItemList = computed((): TabFilterItem<TabValue>[] => {
-  const APPROVAL_REQUESTED: TabFilterItem<TabValue> = {
-    value: "APPROVAL_REQUESTED",
-    label: t("issue.approval-requested"),
-  };
-  const list = hasCustomApprovalFeature.value ? [APPROVAL_REQUESTED] : [];
-  return [
-    { value: "CREATED", label: t("common.created") },
-    ...list,
-    { value: "WAITING_ROLLOUT", label: t("issue.waiting-rollout") },
-    { value: "SUBSCRIBED", label: t("common.subscribed") },
-    { value: "RECENTLY_CLOSED", label: t("project.overview.recently-closed") },
-  ];
+const tab = computed<TabValue>({
+  set(tab) {
+    if (tab === "") return;
+    const base = cloneDeep(state.params);
+    base.scopes = base.scopes.filter((s) => defaultScopeIds.value.has(s.id));
+    state.params = mergeSearchParamsByTab(base, tab);
+  },
+  get() {
+    return guessTabValueFromSearchParams(state.params);
+  },
 });
 
 const onTrialingModalClose = () => {
@@ -289,42 +402,82 @@ const onTrialingModalClose = () => {
 
 const planImage = computed(() => {
   return new URL(
-    `../assets/plan-${planTypeToString(
+    `@/assets/plan-${planTypeToString(
       subscriptionStore.currentPlan
     ).toLowerCase()}.png`,
     import.meta.url
   ).href;
 });
 
-const issueLink = computed(() => {
-  if (tab.value === "CREATED") {
-    return "/issue?creator=" + currentUserUID.value;
-  }
-  if (tab.value === "APPROVAL_REQUESTED") {
-    return "/issue?approver=" + currentUserUID.value;
-  }
-  if (tab.value === "SUBSCRIBED") {
-    return "/issue?subscriber=" + currentUserUID.value;
-  }
-
-  // TODO(d): use closed filter for WAITING_ROLLOUT and RECENTLY_CLOSED.
-  return "/issue";
+const statusTabDisabled = computed(() => {
+  if (state.advanced) return false;
+  return ["APPROVAL_REQUESTED", "WAITING_ROLLOUT"].includes(tab.value);
 });
 
-const commonIssueFilter = computed((): IssueFilter => {
-  return {
-    project: "projects/-",
-    query: "",
-  };
+const mergedIssueFilter = computed(() => {
+  return buildIssueFilterBySearchParams(state.params);
 });
+const mergedUIIssueFilter = computed(() => {
+  return buildUIIssueFilterBySearchParams(state.params);
+});
+
+const selectTab = (target: TabValue) => {
+  if (target === "") return;
+  storedTab.value = target;
+  tab.value = target;
+};
+
+const toggleAdvancedSearch = (on: boolean) => {
+  state.advanced = on;
+  if (!on) {
+    if (storedTab.value !== "") {
+      selectTab(storedTab.value);
+    } else {
+      selectTab(tabItemList.value[0].value);
+    }
+    state.params.query = "";
+  }
+};
 
 watch(
-  [hasCustomApprovalFeature, tab],
+  [tab],
   () => {
-    if (!hasCustomApprovalFeature.value && tab.value === "APPROVAL_REQUESTED") {
-      tab.value = "WAITING_ROLLOUT";
+    if (tab.value === "APPROVAL_REQUESTED" || tab.value === "WAITING_ROLLOUT") {
+      if (getValueFromSearchParams(state.params, "status") === "CLOSED") {
+        upsertScope(
+          state.params,
+          {
+            id: "status",
+            value: "OPEN",
+          },
+          true /* mutate */
+        );
+      }
     }
   },
   { immediate: true }
+);
+
+watch(
+  [() => state.params, tab],
+  () => {
+    if (state.params.query || tab.value === "") {
+      // using custom advanced search query, sync the search query string
+      // to URL
+      router.replace({
+        query: {
+          ...route.query,
+          qs: buildSearchTextBySearchParams(state.params),
+        },
+      });
+    } else {
+      const query = cloneDeep(route.query);
+      delete query["qs"];
+      router.replace({
+        query,
+      });
+    }
+  },
+  { deep: true }
 );
 </script>

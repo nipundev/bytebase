@@ -24,7 +24,7 @@
   </div>
 
   <DatabaseGroupPanel
-    v-if="state.showDatabaseGroupPanel"
+    v-model:show="state.showDatabaseGroupPanel"
     :project="project"
     :resource-type="state.resourceType"
     :database-group="state.editingDatabaseGroup"

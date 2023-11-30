@@ -248,6 +248,47 @@ func (r *Runner) findApprovalTemplateForIssue(ctx context.Context, issue *store.
 	}
 
 	if err := func() error {
+		if len(payload.Approval.ApprovalTemplates) != 0 {
+			return nil
+		}
+		if issue.PipelineUID == nil {
+			return nil
+		}
+		stages, err := r.store.ListStageV2(ctx, *issue.PipelineUID)
+		if err != nil {
+			return errors.Wrapf(err, "failed to list stages")
+		}
+		if len(stages) == 0 {
+			return nil
+		}
+		policy, err := r.store.GetRolloutPolicy(ctx, stages[0].EnvironmentID)
+		if err != nil {
+			return errors.Wrapf(err, "failed to get rollout policy")
+		}
+		payload, err := json.Marshal(api.ActivityNotifyPipelineRolloutPayload{
+			RolloutPolicy: policy,
+			StageName:     stages[0].Name,
+		})
+		if err != nil {
+			return errors.Wrapf(err, "failed to marshal activity payload")
+		}
+		create := &store.ActivityMessage{
+			CreatorUID:   api.SystemBotID,
+			ContainerUID: *issue.PipelineUID,
+			Type:         api.ActivityNotifyPipelineRollout,
+			Level:        api.ActivityInfo,
+			Comment:      "",
+			Payload:      string(payload),
+		}
+		if _, err := r.activityManager.CreateActivity(ctx, create, &activity.Metadata{Issue: issue}); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		slog.Error("failed to create rollout release notification activity", log.BBError(err))
+	}
+
+	if err := func() error {
 		if len(payload.Approval.ApprovalTemplates) != 1 {
 			return nil
 		}
@@ -406,6 +447,25 @@ func getDatabaseGeneralIssueRisk(ctx context.Context, s *store.Store, licenseSer
 	// cannot conclude risk source
 	if riskSource == store.RiskSourceUnknown {
 		return 0, store.RiskSourceUnknown, true, nil
+	}
+
+	// If any plan check run is skipped because of large SQL,
+	// return the max risk level in the risks of the same risk source.
+	for _, run := range latestPlanCheckRun {
+		for _, result := range run.Result.GetResults() {
+			if result.GetCode() == common.SizeExceeded.Int32() {
+				var maxRiskLevel int32
+				for _, risk := range risks {
+					if risk.Source != riskSource {
+						continue
+					}
+					if risk.Level > maxRiskLevel {
+						maxRiskLevel = risk.Level
+					}
+				}
+				return maxRiskLevel, riskSource, true, nil
+			}
+		}
 	}
 
 	e, err := cel.NewEnv(common.RiskFactors...)

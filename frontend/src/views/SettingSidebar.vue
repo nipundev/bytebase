@@ -1,7 +1,6 @@
 <template>
   <CommonSidebar
-    type="route"
-    :show-go-back="true"
+    :key="'setting'"
     :item-list="(settingSidebarItemList as SidebarItem[])"
     :get-item-class="getItemClass"
   />
@@ -28,10 +27,24 @@ const currentUserV1 = useCurrentUserV1();
 
 const getItemClass = (path: string | undefined) => {
   const list = [];
-  if (route.name === "workspace.profile") {
-    if (path === "/setting/member") {
-      list.push("router-link-active", "bg-link-hover");
-    }
+  switch (route.name) {
+    case "setting.workspace.sso.detail":
+    case "setting.workspace.sso.create":
+      if (path === "/setting/sso") {
+        list.push("router-link-active", "bg-link-hover");
+      }
+      break;
+    case "workspace.profile":
+      if (path === "/setting/member") {
+        list.push("router-link-active", "bg-link-hover");
+      }
+      break;
+    case "setting.workspace.sql-review.create":
+    case "setting.workspace.sql-review.detail":
+      if (path === "/setting/sql-review") {
+        list.push("router-link-active", "bg-link-hover");
+      }
+      break;
   }
   return list;
 };
@@ -41,20 +54,24 @@ const settingSidebarItemList = computed((): SidebarItem[] => {
     {
       title: t("settings.sidebar.account"),
       icon: h(UserCircle),
+      type: "div",
       children: [
         {
           title: t("settings.sidebar.profile"),
           path: "/setting/profile",
+          type: "route",
         },
       ],
     },
     {
       title: t("settings.sidebar.workspace"),
       icon: h(Building),
+      type: "div",
       children: [
         {
           title: t("settings.sidebar.general"),
           path: "/setting/general",
+          type: "route",
         },
         {
           title: t("settings.sidebar.members"),
@@ -63,10 +80,12 @@ const settingSidebarItemList = computed((): SidebarItem[] => {
             "setting.workspace.member",
             currentUserV1.value.userRole
           ),
+          type: "route",
         },
         {
           title: t("settings.sidebar.custom-roles"),
           path: "/setting/role",
+          type: "route",
         },
         {
           title: t("common.projects"),
@@ -75,10 +94,12 @@ const settingSidebarItemList = computed((): SidebarItem[] => {
             "setting.workspace.project",
             currentUserV1.value.userRole
           ),
+          type: "route",
         },
         {
           title: t("settings.sidebar.subscription"),
           path: "/setting/subscription",
+          type: "route",
         },
         {
           title: t("settings.sidebar.debug-log"),
@@ -87,32 +108,39 @@ const settingSidebarItemList = computed((): SidebarItem[] => {
             "setting.workspace.debug-log",
             currentUserV1.value.userRole
           ),
+          type: "route",
         },
       ],
     },
     {
       title: t("settings.sidebar.security-and-policy"),
       icon: h(ShieldCheck),
+      type: "div",
       children: [
         {
           title: t("sql-review.title"),
           path: "/setting/sql-review",
+          type: "route",
         },
         {
           title: t("slow-query.self"),
           path: "/setting/slow-query",
+          type: "route",
         },
         {
           title: t("schema-template.self"),
           path: "/setting/schema-template",
+          type: "route",
         },
         {
           title: t("custom-approval.risk.risk-center"),
           path: "/setting/risk-center",
+          type: "route",
         },
         {
           title: t("custom-approval.self"),
           path: "/setting/custom-approval",
+          type: "route",
         },
         {
           title: t("settings.sidebar.sensitive-data"),
@@ -121,6 +149,7 @@ const settingSidebarItemList = computed((): SidebarItem[] => {
             "setting.workspace.sensitive-data",
             currentUserV1.value.userRole
           ),
+          type: "route",
         },
         {
           title: t("settings.sidebar.access-control"),
@@ -129,6 +158,7 @@ const settingSidebarItemList = computed((): SidebarItem[] => {
             "setting.workspace.access-control",
             currentUserV1.value.userRole
           ),
+          type: "route",
         },
         {
           title: t("settings.sidebar.audit-log"),
@@ -137,12 +167,14 @@ const settingSidebarItemList = computed((): SidebarItem[] => {
             "setting.workspace.audit-log",
             currentUserV1.value.userRole
           ),
+          type: "route",
         },
       ],
     },
     {
       title: t("settings.sidebar.integration"),
       icon: h(Link),
+      type: "div",
       children: [
         {
           title: t("settings.sidebar.gitops"),
@@ -151,6 +183,7 @@ const settingSidebarItemList = computed((): SidebarItem[] => {
             "setting.workspace.gitops",
             currentUserV1.value.userRole
           ),
+          type: "route",
         },
         {
           title: t("settings.sidebar.sso"),
@@ -159,6 +192,7 @@ const settingSidebarItemList = computed((): SidebarItem[] => {
             "setting.workspace.sso",
             currentUserV1.value.userRole
           ),
+          type: "route",
         },
         {
           title: t("settings.sidebar.mail-delivery"),
@@ -167,13 +201,15 @@ const settingSidebarItemList = computed((): SidebarItem[] => {
             "setting.workspace.mail-delivery",
             currentUserV1.value.userRole
           ),
+          type: "route",
         },
       ],
     },
     {
       title: t("common.archived"),
       icon: h(Archive),
-      path: "/archive",
+      path: "/setting/archive",
+      type: "route",
     },
   ];
 });

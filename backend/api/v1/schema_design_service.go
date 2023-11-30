@@ -14,6 +14,7 @@ import (
 
 	"github.com/bytebase/bytebase/backend/common"
 	enterprise "github.com/bytebase/bytebase/backend/enterprise/api"
+	api "github.com/bytebase/bytebase/backend/legacyapi"
 	"github.com/bytebase/bytebase/backend/plugin/parser/base"
 	"github.com/bytebase/bytebase/backend/store"
 	storepb "github.com/bytebase/bytebase/proto/generated-go/store"
@@ -55,11 +56,43 @@ func (s *SchemaDesignService) GetSchemaDesign(ctx context.Context, request *v1pb
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, err.Error())
 	}
+	if err := s.checkSchemaDesignPermission(ctx, sheet.ProjectUID); err != nil {
+		return nil, err
+	}
 	schemaDesign, err := s.convertSheetToSchemaDesign(ctx, sheet, v1pb.SchemaDesignView_SCHEMA_DESIGN_VIEW_FULL)
 	if err != nil {
 		return nil, err
 	}
 	return schemaDesign, nil
+}
+
+func (s *SchemaDesignService) checkSchemaDesignPermission(ctx context.Context, projectUID int) error {
+	role, ok := ctx.Value(common.RoleContextKey).(api.Role)
+	if !ok {
+		return status.Errorf(codes.Internal, "role not found")
+	}
+	if isOwnerOrDBA(role) {
+		return nil
+	}
+
+	principalID, ok := ctx.Value(common.PrincipalIDContextKey).(int)
+	if !ok {
+		return status.Errorf(codes.Internal, "principal ID not found")
+	}
+	policy, err := s.store.GetProjectPolicy(ctx, &store.GetProjectPolicyMessage{UID: &projectUID})
+	if err != nil {
+		return status.Errorf(codes.Internal, err.Error())
+	}
+	for _, binding := range policy.Bindings {
+		if binding.Role == api.Developer || binding.Role == api.Owner {
+			for _, member := range binding.Members {
+				if member.ID == principalID || member.Email == api.AllUsers {
+					return nil
+				}
+			}
+		}
+	}
+	return status.Errorf(codes.PermissionDenied, "permission denied")
 }
 
 // ListSchemaDesigns lists schema designs.
@@ -96,6 +129,13 @@ func (s *SchemaDesignService) ListSchemaDesigns(ctx context.Context, request *v1
 
 	schemaDesigns := make([]*v1pb.SchemaDesign, 0)
 	for _, sheet := range sheets {
+		if err := s.checkSchemaDesignPermission(ctx, sheet.ProjectUID); err != nil {
+			st := status.Convert(err)
+			if st.Code() == codes.PermissionDenied {
+				continue
+			}
+			return nil, err
+		}
 		schemaDesign, err := s.convertSheetToSchemaDesign(ctx, sheet, request.View)
 		if err != nil {
 			return nil, err
@@ -123,11 +163,27 @@ func (s *SchemaDesignService) CreateSchemaDesign(ctx context.Context, request *v
 	if project == nil {
 		return nil, status.Errorf(codes.NotFound, fmt.Sprintf("project not found: %v", projectID))
 	}
+	if err := s.checkSchemaDesignPermission(ctx, project.UID); err != nil {
+		return nil, err
+	}
+
 	principalID, ok := ctx.Value(common.PrincipalIDContextKey).(int)
 	if !ok {
 		return nil, status.Errorf(codes.Internal, "principal ID not found")
 	}
 	schemaDesign := request.SchemaDesign
+	if schemaDesign == nil {
+		return nil, status.Errorf(codes.InvalidArgument, "empty branch design")
+	}
+
+	schemaDesignSheetType := storepb.SheetPayload_SCHEMA_DESIGN.String()
+	sheet, err := s.store.GetSheet(ctx, &store.FindSheetMessage{ProjectUID: &project.UID, Title: &schemaDesign.Title, PayloadType: &schemaDesignSheetType}, principalID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to get existing branch design, error %v", err)
+	}
+	if sheet != nil {
+		return nil, status.Errorf(codes.FailedPrecondition, "branch %q has already existed", schemaDesign.Title)
+	}
 
 	// Branch protection check.
 	if err := s.checkProtectionRules(ctx, project, schemaDesign, principalID); err != nil {
@@ -203,7 +259,7 @@ func (s *SchemaDesignService) CreateSchemaDesign(ctx context.Context, request *v
 		schemaDesignSheetPayload.SchemaDesign.BaselineSheetId = fmt.Sprintf("%d", baselineSheetUID)
 	} else if schemaDesignType == storepb.SheetPayload_SchemaDesign_PERSONAL_DRAFT {
 		baselineSheetCreate := &store.SheetMessage{
-			Name:        schemaDesign.Title,
+			Title:       schemaDesign.Title,
 			ProjectUID:  project.UID,
 			DatabaseUID: &database.UID,
 			Statement:   schemaDesign.BaselineSchema,
@@ -226,7 +282,7 @@ func (s *SchemaDesignService) CreateSchemaDesign(ctx context.Context, request *v
 	}
 
 	sheetCreate := &store.SheetMessage{
-		Name:        schemaDesign.Title,
+		Title:       schemaDesign.Title,
 		ProjectUID:  project.UID,
 		DatabaseUID: &database.UID,
 		Statement:   schema,
@@ -237,7 +293,7 @@ func (s *SchemaDesignService) CreateSchemaDesign(ctx context.Context, request *v
 		UpdaterID:   principalID,
 		Payload:     schemaDesignSheetPayload,
 	}
-	sheet, err := s.store.CreateSheet(ctx, sheetCreate)
+	sheet, err = s.store.CreateSheet(ctx, sheetCreate)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, fmt.Sprintf("failed to create sheet: %v", err))
 	}
@@ -330,6 +386,9 @@ func (s *SchemaDesignService) UpdateSchemaDesign(ctx context.Context, request *v
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, fmt.Sprintf("failed to get sheet: %v", err))
 	}
+	if err := s.checkSchemaDesignPermission(ctx, sheet.ProjectUID); err != nil {
+		return nil, err
+	}
 
 	sheetUpdate := &store.PatchSheetMessage{
 		UID:       sheetUID,
@@ -342,7 +401,7 @@ func (s *SchemaDesignService) UpdateSchemaDesign(ctx context.Context, request *v
 	}
 
 	if slices.Contains(request.UpdateMask.Paths, "title") {
-		sheetUpdate.Name = &schemaDesign.Title
+		sheetUpdate.Title = &schemaDesign.Title
 	}
 	if slices.Contains(request.UpdateMask.Paths, "schema") {
 		sheetUpdate.Statement = &schemaDesign.Schema
@@ -520,6 +579,9 @@ func (s *SchemaDesignService) DeleteSchemaDesign(ctx context.Context, request *v
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, fmt.Sprintf("failed to get sheet: %v", err))
 	}
+	if err := s.checkSchemaDesignPermission(ctx, sheet.ProjectUID); err != nil {
+		return nil, err
+	}
 	schemaDesign, err := s.convertSheetToSchemaDesign(ctx, sheet, v1pb.SchemaDesignView_SCHEMA_DESIGN_VIEW_FULL)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, fmt.Sprintf("failed to convert sheet to schema design: %v", err))
@@ -691,7 +753,7 @@ func (s *SchemaDesignService) convertSheetToSchemaDesign(ctx context.Context, sh
 	}
 	schemaDesign := &v1pb.SchemaDesign{
 		Name:                   name,
-		Title:                  sheet.Name,
+		Title:                  sheet.Title,
 		Etag:                   "",
 		Schema:                 "",
 		SchemaMetadata:         nil,

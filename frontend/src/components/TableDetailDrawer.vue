@@ -163,17 +163,46 @@
             </div>
           </div>
 
-          <div v-if="shouldShowColumnTable" class="mt-6 px-6">
-            <div class="text-lg leading-6 font-medium text-main mb-4">
-              {{ $t("database.columns") }}
+          <div v-if="shouldShowPartitionTablesDataTable" class="mt-6 px-6">
+            <div class="mb-4 w-full flex flex-row justify-between items-center">
+              <div class="text-lg leading-6 font-medium text-main">
+                {{ $t("database.partition-tables") }}
+              </div>
+              <div>
+                <SearchBox
+                  :value="state.partitionTableNameSearchKeyword"
+                  :placeholder="$t('common.filter-by-name')"
+                  @update:value="state.partitionTableNameSearchKeyword = $event"
+                />
+              </div>
             </div>
-            <ColumnTable
+            <PartitionTablesDataTable
+              :table="table"
+              :search="state.partitionTableNameSearchKeyword"
+            />
+          </div>
+
+          <div v-if="shouldShowColumnTable" class="mt-6 px-6">
+            <div class="mb-4 w-full flex flex-row justify-between items-center">
+              <div class="text-lg leading-6 font-medium text-main">
+                {{ $t("database.columns") }}
+              </div>
+              <div>
+                <SearchBox
+                  :value="state.columnNameSearchKeyword"
+                  :placeholder="$t('common.filter-by-name')"
+                  @update:value="state.columnNameSearchKeyword = $event"
+                />
+              </div>
+            </div>
+            <ColumnDataTable
               :database="database"
               :schema="schemaName"
               :table="table"
               :column-list="table.columns"
               :mask-data-list="sensitiveDataList"
               :classification-config="classificationConfig"
+              :search="state.columnNameSearchKeyword"
             />
           </div>
 
@@ -190,7 +219,7 @@
 </template>
 
 <script lang="ts" setup>
-import { computed, watch, ref } from "vue";
+import { computed, watch, ref, reactive } from "vue";
 import {
   DatabaseV1Name,
   InstanceV1Name,
@@ -214,9 +243,15 @@ import {
   isDatabaseV1Queryable,
   isGhostTable,
 } from "@/utils";
-import ColumnTable from "./ColumnTable.vue";
+import ColumnDataTable from "./ColumnDataTable/index.vue";
 import { SQLEditorButtonV1 } from "./DatabaseDetail";
 import IndexTable from "./IndexTable.vue";
+import PartitionTablesDataTable from "./PartitionTablesDataTable.vue";
+
+interface LocalState {
+  columnNameSearchKeyword: string;
+  partitionTableNameSearchKeyword: string;
+}
 
 const props = defineProps<{
   show: boolean;
@@ -232,6 +267,10 @@ defineEmits(["dismiss"]);
 const databaseV1Store = useDatabaseV1Store();
 const dbSchemaStore = useDBSchemaV1Store();
 const currentUserV1 = useCurrentUserV1();
+const state = reactive<LocalState>({
+  columnNameSearchKeyword: "",
+  partitionTableNameSearchKeyword: "",
+});
 const table = ref<TableMetadata>();
 
 const database = computed(() => {
@@ -260,9 +299,24 @@ const hasSchemaProperty = computed(
     instanceEngine.value === Engine.POSTGRES ||
     instanceEngine.value === Engine.RISINGWAVE
 );
+
+const hasPartitionTables = computed(() => {
+  return (
+    // Only show partition tables for PostgreSQL.
+    database.value.instanceEntity.engine === Engine.POSTGRES &&
+    table.value &&
+    table.value.partitions.length > 0
+  );
+});
+
+const shouldShowPartitionTablesDataTable = computed(() => {
+  return hasPartitionTables.value;
+});
+
 const shouldShowColumnTable = computed(() => {
   return instanceEngine.value !== Engine.MONGODB;
 });
+
 const getTableName = (tableName: string) => {
   if (hasSchemaProperty.value) {
     return `"${props.schemaName}"."${tableName}"`;

@@ -1,6 +1,8 @@
 <template>
-  <div class="w-full h-full px-2 space-y-2 relative overflow-y-hidden">
-    <div class="w-full flex sticky top-0 pt-2 bg-white z-10 space-x-2">
+  <div
+    class="w-full h-full px-2 flex flex-col gap-y-2 relative overflow-y-hidden"
+  >
+    <div class="w-full flex pt-2 bg-white z-10 space-x-2">
       <NInput
         v-model:value="searchPattern"
         size="small"
@@ -19,15 +21,19 @@
       </button>
     </div>
     <div
-      class="schema-designer-database-tree pb-2 overflow-y-auto h-full text-sm"
+      ref="treeContainerElRef"
+      class="schema-designer-database-tree flex-1 pb-1 text-sm overflow-hidden select-none"
+      :data-height="treeContainerHeight"
     >
       <NTree
-        :key="treeKeyRef"
+        v-if="treeContainerHeight > 0"
         ref="treeRef"
         block-line
         virtual-scroll
-        style="height: 100%"
-        :data="treeData"
+        :style="{
+          height: `${treeContainerHeight}px`,
+        }"
+        :data="treeDataRef"
         :pattern="searchPattern"
         :render-prefix="renderPrefix"
         :render-label="renderLabel"
@@ -68,7 +74,8 @@
 </template>
 
 <script lang="ts" setup>
-import { escape, head, isUndefined } from "lodash-es";
+import { useElementSize } from "@vueuse/core";
+import { debounce, escape, head, isUndefined, pick } from "lodash-es";
 import { TreeOption, NEllipsis, NInput, NDropdown, NTree } from "naive-ui";
 import { v1 as uuidv1 } from "uuid";
 import { computed, watch, ref, h, reactive, nextTick, onMounted } from "vue";
@@ -86,7 +93,6 @@ import { getHighlightHTMLByKeyWords, isDescendantOf } from "@/utils";
 import SchemaNameModal from "../Modals/SchemaNameModal.vue";
 import TableNameModal from "../Modals/TableNameModal.vue";
 import { isTableChanged } from "../utils";
-import { isSchemaChanged } from "../utils/schema";
 
 interface BaseTreeNode extends TreeOption {
   key: string;
@@ -135,12 +141,19 @@ const state = reactive<LocalState>({
 const readonly = computed(() => schemaEditorV1Store.readonly);
 const currentTab = computed(() => schemaEditorV1Store.currentTab);
 
+const treeContainerElRef = ref<HTMLElement>();
+const { height: treeContainerHeight } = useElementSize(
+  treeContainerElRef,
+  undefined,
+  {
+    box: "content-box",
+  }
+);
 const treeRef = ref<InstanceType<typeof NTree>>();
 const searchPattern = ref("");
 const expandedKeysRef = ref<string[]>([]);
 const selectedKeysRef = ref<string[]>([]);
-// Trigger re-render when the tree data is changed.
-const treeKeyRef = ref<string>("");
+const treeDataRef = ref<TreeNode[]>([]);
 const contextMenu = reactive<TreeContextMenu>({
   showDropdown: false,
   clientX: 0,
@@ -159,37 +172,20 @@ const engine = computed(() => {
   return (branchSchema.value.branch as any as SchemaDesign).engine;
 });
 
-const schemaList = computed(() => branchSchema.value.schemaList);
-const tableList = computed(() =>
-  schemaList.value.map((schema) => schema.tableList).flat()
-);
-const treeData = computed(() => {
-  const treeNodeList: TreeNode[] = [];
-  for (const schema of schemaList.value) {
-    const schemaTreeNode: TreeNodeForSchema = {
-      type: "schema",
-      key: `s-${schema.id}`,
-      label: schema.name,
-      isLeaf: false,
-      schemaId: schema.id,
-      children: schema.tableList.map((table) => ({
-        type: "table",
-        key: `t-${schema.id}-${table.id}`,
-        label: table.name,
-        children: [],
-        isLeaf: true,
-        schemaId: schema.id,
-        tableId: table.id,
-      })),
+const schemaList = computed(() =>
+  branchSchema.value.schemaList.map((schema) => {
+    return {
+      ...schema,
+      tableList: schema.tableList.map((table) => {
+        // Don't watch column changes in database tree.
+        return pick(table, ["id", "name", "status"]);
+      }),
     };
-    if (schemaTreeNode.children!.length === 0) {
-      schemaTreeNode.isLeaf = true;
-    }
-    treeNodeList.push(schemaTreeNode);
-  }
-
-  return treeNodeList;
-});
+  })
+);
+const tableList = computed(() =>
+  branchSchema.value.schemaList.map((schema) => schema.tableList).flat()
+);
 
 const contextMenuOptions = computed(() => {
   const treeNode = contextMenu.treeNode;
@@ -270,25 +266,47 @@ onMounted(() => {
   if (!branchSchema.value) {
     throw new Error("branch should not be empty");
   }
+
+  buildBranchTreeData();
+  const firstChildNode = head(treeDataRef.value);
+  if (firstChildNode) {
+    nextTick(() => {
+      // Auto expand the first tree node.
+      openTabForTreeNode(firstChildNode);
+    });
+  }
 });
 
-watch(
-  () => treeData.value,
-  () => {
-    treeKeyRef.value = Math.random().toString();
-    const firstChildNode = head(treeData.value);
-    if (firstChildNode) {
-      nextTick(() => {
-        // Auto expand the first tree node.
-        openTabForTreeNode(firstChildNode);
-      });
+const buildBranchTreeData = () => {
+  const treeNodeList: TreeNode[] = [];
+  for (const schema of schemaList.value) {
+    const schemaTreeNode: TreeNodeForSchema = {
+      type: "schema",
+      key: `s-${schema.id}`,
+      label: schema.name,
+      isLeaf: false,
+      schemaId: schema.id,
+      children: schema.tableList.map((table) => ({
+        type: "table",
+        key: `t-${schema.id}-${table.id}`,
+        label: table.name,
+        children: [],
+        isLeaf: true,
+        schemaId: schema.id,
+        tableId: table.id,
+      })),
+    };
+    if (schemaTreeNode.children!.length === 0) {
+      schemaTreeNode.isLeaf = true;
     }
-  },
-  {
-    deep: true,
-    immediate: true,
+    treeNodeList.push(schemaTreeNode);
   }
-);
+  treeDataRef.value = treeNodeList;
+};
+
+watch(() => schemaList.value, debounce(buildBranchTreeData, 250), {
+  deep: true,
+});
 
 watch(
   () => currentTab.value,
@@ -349,21 +367,16 @@ const renderLabel = ({ option }: { option: TreeOption }) => {
     );
     if (schema) {
       if (engine.value !== Engine.POSTGRES) {
-        label = "Tables";
+        label = t("db.tables");
       }
       if (schema.status === "created") {
         additionalClassList.push("text-green-700");
       } else if (schema.status === "dropped") {
         additionalClassList.push("text-red-700 line-through");
       } else {
-        if (
-          isSchemaChanged(branchSchema.value.branch.name, treeNode.schemaId)
-        ) {
-          additionalClassList.push("text-yellow-700");
-        }
+        // To optimize the performance of the comparison, skip check if schema is changed for now.
       }
     }
-    // do nothing
   } else if (treeNode.type === "table") {
     const table = tableList.value.find(
       (table) => table.id === treeNode.tableId
@@ -670,37 +683,30 @@ const handleExpandedKeysChange = (expandedKeys: string[]) => {
 };
 </script>
 
-<style>
-.schema-designer-database-tree .n-tree-node-wrapper {
+<style lang="postcss" scoped>
+.schema-designer-database-tree :deep(.n-tree-node-wrapper) {
   @apply !p-0;
 }
-.schema-designer-database-tree .n-tree-node-content {
+.schema-designer-database-tree :deep(.n-tree-node-content) {
   @apply !pl-2 text-sm;
 }
-.schema-designer-database-tree .n-tree-node-indent {
+.schema-designer-database-tree :deep(.n-tree-node-indent) {
   width: 0.25rem;
 }
-.schema-designer-database-tree .n-tree-node-content__suffix {
+.schema-designer-database-tree :deep(.n-tree-node-content__suffix) {
   @apply rounded-sm !hidden hover:opacity-80;
 }
 .schema-designer-database-tree
-  .n-tree-node-wrapper:hover
-  .n-tree-node-content__suffix {
+  :deep(.n-tree-node-wrapper:hover .n-tree-node-content__suffix) {
   @apply !flex;
 }
 .schema-designer-database-tree
-  .n-tree-node-wrapper
-  .n-tree-node--selected
-  .n-tree-node-content__suffix {
+  :deep(.n-tree-node-wrapper
+    .n-tree-node--selected
+    .n-tree-node-content__suffix) {
   @apply !flex;
 }
-.schema-designer-database-tree .n-tree-node-switcher {
+.schema-designer-database-tree :deep(.n-tree-node-switcher) {
   @apply px-0 !w-4 !h-7;
-}
-</style>
-
-<style scoped>
-.schema-designer-database-tree {
-  max-height: calc(100% - 80px);
 }
 </style>

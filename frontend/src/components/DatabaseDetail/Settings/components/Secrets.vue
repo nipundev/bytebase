@@ -16,7 +16,7 @@
           <i18n-t keypath="database.secret.description">
             <template #guide>
               <a
-                href="https://www.bytebase.com/docs/change-database/secret?source=console"
+                href="https://www.bytebase.com/docs/security/secret?source=console"
                 target="_blank"
                 class="normal-link"
               >
@@ -73,13 +73,12 @@
       </BBGrid>
     </div>
 
-    <NDrawer
+    <Drawer
       :show="!!detail"
       width="auto"
-      :auto-focus="false"
       @update:show="(show: boolean) => !show && hideDetail()"
     >
-      <NDrawerContent
+      <DrawerContent
         :title="
           detail?.mode === 'CREATE'
             ? $t('database.secret.new')
@@ -182,8 +181,8 @@
             </NButton>
           </div>
         </template>
-      </NDrawerContent>
-    </NDrawer>
+      </DrawerContent>
+    </Drawer>
   </div>
   <FeatureModal
     feature="bb.feature.encrypted-secrets"
@@ -195,10 +194,11 @@
 
 <script setup lang="ts">
 import { cloneDeep } from "lodash-es";
-import { NButton, NInput, NDrawer, NDrawerContent } from "naive-ui";
+import { NButton, NInput } from "naive-ui";
 import { computed, ref, watch, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
 import { type BBGridColumn, type BBGridRow, BBGrid } from "@/bbkit";
+import { Drawer, DrawerContent } from "@/components/v2";
 import {
   pushNotification,
   useDatabaseSecretStore,

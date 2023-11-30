@@ -3,6 +3,7 @@ import { Status } from "nice-grpc-common";
 import { markRaw } from "vue";
 import { useI18n } from "vue-i18n";
 import { BBNotificationStyle } from "@/bbkit/types";
+import { parseSQL } from "@/components/MonacoEditor/sqlParser";
 import {
   pushNotification,
   useTabStore,
@@ -22,7 +23,6 @@ import {
   advice_StatusToJSON,
 } from "@/types/proto/v1/sql_service";
 import { isDatabaseV1Alterable } from "@/utils";
-import { parseSQL } from "../components/MonacoEditor/sqlParser";
 
 const useExecuteSQL = () => {
   const { t } = useI18n();
@@ -82,7 +82,7 @@ const useExecuteSQL = () => {
     }
 
     const tab = tabStore.currentTab;
-    const { data } = parseSQL(query);
+    const { data } = await parseSQL(query);
 
     if (data === undefined) {
       notify("CRITICAL", t("sql-editor.notify-invalid-sql-statement"));
@@ -163,13 +163,21 @@ const useExecuteSQL = () => {
         });
         continue;
       }
+      const instanceId = isUnknownDatabase
+        ? tab.connection.instanceId
+        : database.instanceEntity.uid;
+      const databaseName = isUnknownDatabase ? "" : database.databaseName;
+      const dataSourceId =
+        instanceId === tab.connection.instanceId
+          ? tab.connection.dataSourceId
+          : undefined;
+
       try {
         const sqlResultSet = await sqlEditorStore.executeQuery(
           {
-            instanceId: isUnknownDatabase
-              ? tab.connection.instanceId
-              : database.instanceEntity.uid,
-            databaseName: isUnknownDatabase ? "" : database.databaseName,
+            instanceId: instanceId,
+            databaseName: databaseName,
+            dataSourceId: dataSourceId,
             statement: selectStatement,
           },
           abortController.signal

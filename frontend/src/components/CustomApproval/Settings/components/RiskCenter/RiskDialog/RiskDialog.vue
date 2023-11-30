@@ -2,7 +2,7 @@
   <BBModal
     v-if="dialog"
     :title="title"
-    :esc-closable="false"
+    :close-on-esc="false"
     :before-close="beforeClose"
     :data-state-dirty="state.dirty"
     @close="dialog = undefined"
@@ -54,7 +54,7 @@ const title = computed(() => {
       return t("custom-approval.risk-rule.view-rule");
     } else {
       if (mode === "CREATE") {
-        return t("custom-approval.risk-rule.add-rule");
+        return t("common.add");
       } else if (mode === "EDIT") {
         return t("custom-approval.risk-rule.edit-rule");
       }

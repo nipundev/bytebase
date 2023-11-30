@@ -96,15 +96,6 @@
   
     - [AuthService](#bytebase-v1-AuthService)
   
-- [v1/bookmark_service.proto](#v1_bookmark_service-proto)
-    - [Bookmark](#bytebase-v1-Bookmark)
-    - [CreateBookmarkRequest](#bytebase-v1-CreateBookmarkRequest)
-    - [DeleteBookmarkRequest](#bytebase-v1-DeleteBookmarkRequest)
-    - [ListBookmarksRequest](#bytebase-v1-ListBookmarksRequest)
-    - [ListBookmarksResponse](#bytebase-v1-ListBookmarksResponse)
-  
-    - [BookmarkService](#bytebase-v1-BookmarkService)
-  
 - [v1/cel_service.proto](#v1_cel_service-proto)
     - [BatchDeparseRequest](#bytebase-v1-BatchDeparseRequest)
     - [BatchDeparseResponse](#bytebase-v1-BatchDeparseResponse)
@@ -403,8 +394,6 @@
     - [ScheduleDeployment](#bytebase-v1-ScheduleDeployment)
     - [SchemaGroup](#bytebase-v1-SchemaGroup)
     - [SchemaGroup.Table](#bytebase-v1-SchemaGroup-Table)
-    - [SearchProjectsRequest](#bytebase-v1-SearchProjectsRequest)
-    - [SearchProjectsResponse](#bytebase-v1-SearchProjectsResponse)
     - [SetIamPolicyRequest](#bytebase-v1-SetIamPolicyRequest)
     - [SetupSQLReviewCIRequest](#bytebase-v1-SetupSQLReviewCIRequest)
     - [SetupSQLReviewCIResponse](#bytebase-v1-SetupSQLReviewCIResponse)
@@ -501,6 +490,8 @@
     - [Task.DatabaseSchemaBaseline](#bytebase-v1-Task-DatabaseSchemaBaseline)
     - [Task.DatabaseSchemaUpdate](#bytebase-v1-Task-DatabaseSchemaUpdate)
     - [TaskRun](#bytebase-v1-TaskRun)
+    - [TaskRun.ExecutionDetail](#bytebase-v1-TaskRun-ExecutionDetail)
+    - [TaskRun.ExecutionDetail.Position](#bytebase-v1-TaskRun-ExecutionDetail-Position)
     - [UpdatePlanRequest](#bytebase-v1-UpdatePlanRequest)
   
     - [Plan.ChangeDatabaseConfig.Type](#bytebase-v1-Plan-ChangeDatabaseConfig-Type)
@@ -631,6 +622,8 @@
     - [QueryResult](#bytebase-v1-QueryResult)
     - [QueryRow](#bytebase-v1-QueryRow)
     - [RowValue](#bytebase-v1-RowValue)
+    - [StringifyMetadataRequest](#bytebase-v1-StringifyMetadataRequest)
+    - [StringifyMetadataResponse](#bytebase-v1-StringifyMetadataResponse)
   
     - [Advice.Status](#bytebase-v1-Advice-Status)
   
@@ -671,6 +664,7 @@ Actuator concept is similar to the Spring Boot Actuator.
 | workspace_id | [string](#string) |  | workspace_id is the identifier for the workspace. |
 | gitops_webhook_url | [string](#string) |  | gitops_webhook_url is the webhook URL for GitOps. |
 | debug | [bool](#bool) |  | debug flag means if the debug mode is enabled. |
+| lsp | [bool](#bool) |  | lsp is the enablement of lsp in SQL Editor. |
 
 
 
@@ -1953,115 +1947,6 @@ The user&#39;s `name` field is used to identify the user to update. Format: user
 
 
 
-<a name="v1_bookmark_service-proto"></a>
-<p align="right"><a href="#top">Top</a></p>
-
-## v1/bookmark_service.proto
-
-
-
-<a name="bytebase-v1-Bookmark"></a>
-
-### Bookmark
-
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| name | [string](#string) |  | The name of the bookmark. Format: bookmarks/{bookmark}, user and bookmark are server-generated unique IDs. |
-| title | [string](#string) |  | The title of the bookmark. |
-| link | [string](#string) |  | The resource link of the bookmark. Only support issue link for now. Format: Issue: /issue/slug(issue_name)-{issue_uid} Example: /issue/start-here-add-email-column-to-employee-table-101 |
-
-
-
-
-
-
-<a name="bytebase-v1-CreateBookmarkRequest"></a>
-
-### CreateBookmarkRequest
-
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| bookmark | [Bookmark](#bytebase-v1-Bookmark) |  | The bookmark to create. |
-
-
-
-
-
-
-<a name="bytebase-v1-DeleteBookmarkRequest"></a>
-
-### DeleteBookmarkRequest
-
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| name | [string](#string) |  | The name of the bookmark to delete. Format: bookmarks/{bookmark} |
-
-
-
-
-
-
-<a name="bytebase-v1-ListBookmarksRequest"></a>
-
-### ListBookmarksRequest
-
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| page_size | [int32](#int32) |  | Not used. The maximum number of bookmarks to return. The service may return fewer than this value. If unspecified, at most 50 bookmarks will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000. |
-| page_token | [string](#string) |  | Not used. A page token, received from a previous `ListBookmarks` call. Provide this to retrieve the subsequent page.
-
-When paginating, all other parameters provided to `ListBookmarks` must match the call that provided the page token. |
-
-
-
-
-
-
-<a name="bytebase-v1-ListBookmarksResponse"></a>
-
-### ListBookmarksResponse
-
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| bookmarks | [Bookmark](#bytebase-v1-Bookmark) | repeated | The list of bookmarks. |
-| next_page_token | [string](#string) |  | Not used. A token, which can be sent as `page_token` to retrieve the next page. If this field is omitted, there are no subsequent pages. |
-
-
-
-
-
- 
-
- 
-
- 
-
-
-<a name="bytebase-v1-BookmarkService"></a>
-
-### BookmarkService
-
-
-| Method Name | Request Type | Response Type | Description |
-| ----------- | ------------ | ------------- | ------------|
-| CreateBookmark | [CreateBookmarkRequest](#bytebase-v1-CreateBookmarkRequest) | [Bookmark](#bytebase-v1-Bookmark) | CreateBookmark creates a new bookmark. |
-| DeleteBookmark | [DeleteBookmarkRequest](#bytebase-v1-DeleteBookmarkRequest) | [.google.protobuf.Empty](#google-protobuf-Empty) | DeleteBookmark deletes a bookmark. |
-| ListBookmarks | [ListBookmarksRequest](#bytebase-v1-ListBookmarksRequest) | [ListBookmarksResponse](#bytebase-v1-ListBookmarksResponse) | ListBookmarks lists bookmarks. |
-
- 
-
-
-
 <a name="v1_cel_service-proto"></a>
 <p align="right"><a href="#top">Top</a></p>
 
@@ -3101,12 +2986,12 @@ Combine multiple functions with &#34;&amp;&amp;&#34; and &#34;||&#34;, we MUST u
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| parent | [string](#string) |  | The parent, which owns this collection of databases. Format: instances/{instance} Use &#34;instances/-&#34; to list all databases. |
+| parent | [string](#string) |  | The parent, which owns this collection of databases. - instances/{instance}: list all databases for an instance. Use &#34;instances/-&#34; to list all databases. - projects/{project}: list all databases in a project. |
 | page_size | [int32](#int32) |  | The maximum number of databases to return. The service may return fewer than this value. If unspecified, at most 50 databases will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000. |
 | page_token | [string](#string) |  | A page token, received from a previous `ListDatabases` call. Provide this to retrieve the subsequent page.
 
 When paginating, all other parameters provided to `ListDatabases` must match the call that provided the page token. |
-| filter | [string](#string) |  | Filter is used to filter databases returned in the list. For example, &#34;project = projects/{project}&#34; can be used to list databases in a project. |
+| filter | [string](#string) |  | Filter is used to filter databases returned in the list. For example, &#34;project = projects/{project}&#34; can be used to list databases in a project. Note: the project filter will be moved to parent. |
 
 
 
@@ -5312,6 +5197,7 @@ InstanceOptions is the option for instances.
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
+| parent | [string](#string) |  | The parent parameter&#39;s value depends on the target resource for the request. - instances.list(): An empty string. This method doesn&#39;t require a resource; it simply returns all instances the user has access to. - projects.instances.list(): projects/{PROJECT_ID}. This method lists all instances that have databases in the project. |
 | page_size | [int32](#int32) |  | The maximum number of instances to return. The service may return fewer than this value. If unspecified, at most 50 instances will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000. |
 | page_token | [string](#string) |  | A page token, received from a previous `ListInstances` call. Provide this to retrieve the subsequent page.
 
@@ -6601,41 +6487,6 @@ All the expressions will be used to filter the schema objects in DatabaseSchema.
 
 
 
-<a name="bytebase-v1-SearchProjectsRequest"></a>
-
-### SearchProjectsRequest
-
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| page_size | [int32](#int32) |  | The maximum number of projects to return. The service may return fewer than this value. If unspecified, at most 50 projects will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000. |
-| page_token | [string](#string) |  | A page token, received from a previous `ListProjects` call. Provide this to retrieve the subsequent page.
-
-When paginating, all other parameters provided to `ListProjects` must match the call that provided the page token. |
-| filter | [string](#string) |  | Filter is used to filter projects returned in the list. |
-
-
-
-
-
-
-<a name="bytebase-v1-SearchProjectsResponse"></a>
-
-### SearchProjectsResponse
-
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| projects | [Project](#bytebase-v1-Project) | repeated | The projects from the specified request. |
-| next_page_token | [string](#string) |  | A token, which can be sent as `page_token` to retrieve the next page. If this field is omitted, there are no subsequent pages. |
-
-
-
-
-
-
 <a name="bytebase-v1-SetIamPolicyRequest"></a>
 
 ### SetIamPolicyRequest
@@ -6889,6 +6740,10 @@ The schema group&#39;s `name` field is used to identify the schema group to upda
 | Name | Number | Description |
 | ---- | ------ | ----------- |
 | TYPE_UNSPECIFIED | 0 |  |
+| TYPE_NOTIFY_ISSUE_APPROVED | 23 | Notifications via webhooks.
+
+TYPE_NOTIFY_ISSUE_APPROVED represents the issue approved notification. |
+| TYPE_NOTIFY_PIPELINE_ROLLOUT | 24 | TYPE_NOTIFY_PIPELINE_ROLLOUT represents the pipeline rollout notification. |
 | TYPE_ISSUE_CREATE | 1 | Issue related activity types.
 
 TYPE_ISSUE_CREATE represents creating an issue. |
@@ -7067,7 +6922,6 @@ The type of target.
 | ----------- | ------------ | ------------- | ------------|
 | GetProject | [GetProjectRequest](#bytebase-v1-GetProjectRequest) | [Project](#bytebase-v1-Project) |  |
 | ListProjects | [ListProjectsRequest](#bytebase-v1-ListProjectsRequest) | [ListProjectsResponse](#bytebase-v1-ListProjectsResponse) |  |
-| SearchProjects | [SearchProjectsRequest](#bytebase-v1-SearchProjectsRequest) | [SearchProjectsResponse](#bytebase-v1-SearchProjectsResponse) | Search for projects that the caller has both projects.get permission on, and also satisfy the specified query. |
 | CreateProject | [CreateProjectRequest](#bytebase-v1-CreateProjectRequest) | [Project](#bytebase-v1-Project) |  |
 | UpdateProject | [UpdateProjectRequest](#bytebase-v1-UpdateProjectRequest) | [Project](#bytebase-v1-Project) |  |
 | DeleteProject | [DeleteProjectRequest](#bytebase-v1-DeleteProjectRequest) | [.google.protobuf.Empty](#google-protobuf-Empty) |  |
@@ -8130,7 +7984,42 @@ When paginating, all other parameters provided to `ListRolloutTaskRuns` must mat
 | schema_version | [string](#string) |  |  |
 | execution_status | [TaskRun.ExecutionStatus](#bytebase-v1-TaskRun-ExecutionStatus) |  |  |
 | execution_status_update_time | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  | Last execution status update timestamp. |
+| execution_detail | [TaskRun.ExecutionDetail](#bytebase-v1-TaskRun-ExecutionDetail) |  |  |
 | start_time | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  |
+
+
+
+
+
+
+<a name="bytebase-v1-TaskRun-ExecutionDetail"></a>
+
+### TaskRun.ExecutionDetail
+
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| commands_total | [int32](#int32) |  | Currently, the following fields are only used for EXECUTING status. |
+| commands_completed | [int32](#int32) |  |  |
+| command_start_position | [TaskRun.ExecutionDetail.Position](#bytebase-v1-TaskRun-ExecutionDetail-Position) |  |  |
+| command_end_position | [TaskRun.ExecutionDetail.Position](#bytebase-v1-TaskRun-ExecutionDetail-Position) |  |  |
+
+
+
+
+
+
+<a name="bytebase-v1-TaskRun-ExecutionDetail-Position"></a>
+
+### TaskRun.ExecutionDetail.Position
+
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| line | [int32](#int32) |  | The line number, starting from 0. |
+| column | [int32](#int32) |  | The column number, starting from 0. |
 
 
 
@@ -9975,6 +9864,7 @@ Type of the SheetPayload.
 | statement | [string](#string) |  | The SQL statement to execute. |
 | limit | [int32](#int32) |  | The maximum number of rows to return. |
 | timeout | [google.protobuf.Duration](#google-protobuf-Duration) | optional | The timeout for the request. |
+| data_source_id | [string](#string) |  | The id of data source. It is used for querying admin data source even if the instance has read-only data sources. Or it can be used to query a specific read-only data source. |
 
 
 
@@ -10059,6 +9949,37 @@ Type of the SheetPayload.
 
 
 
+
+<a name="bytebase-v1-StringifyMetadataRequest"></a>
+
+### StringifyMetadataRequest
+
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| metadata | [DatabaseMetadata](#bytebase-v1-DatabaseMetadata) |  |  |
+| engine | [Engine](#bytebase-v1-Engine) |  | The database engine of the schema string. |
+
+
+
+
+
+
+<a name="bytebase-v1-StringifyMetadataResponse"></a>
+
+### StringifyMetadataResponse
+
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| schema | [string](#string) |  |  |
+
+
+
+
+
  
 
 
@@ -10087,12 +10008,13 @@ Type of the SheetPayload.
 
 | Method Name | Request Type | Response Type | Description |
 | ----------- | ------------ | ------------- | ------------|
-| Pretty | [PrettyRequest](#bytebase-v1-PrettyRequest) | [PrettyResponse](#bytebase-v1-PrettyResponse) |  |
 | Query | [QueryRequest](#bytebase-v1-QueryRequest) | [QueryResponse](#bytebase-v1-QueryResponse) |  |
 | Export | [ExportRequest](#bytebase-v1-ExportRequest) | [ExportResponse](#bytebase-v1-ExportResponse) |  |
 | AdminExecute | [AdminExecuteRequest](#bytebase-v1-AdminExecuteRequest) stream | [AdminExecuteResponse](#bytebase-v1-AdminExecuteResponse) stream |  |
 | DifferPreview | [DifferPreviewRequest](#bytebase-v1-DifferPreviewRequest) | [DifferPreviewResponse](#bytebase-v1-DifferPreviewResponse) |  |
 | Check | [CheckRequest](#bytebase-v1-CheckRequest) | [CheckResponse](#bytebase-v1-CheckResponse) |  |
+| Pretty | [PrettyRequest](#bytebase-v1-PrettyRequest) | [PrettyResponse](#bytebase-v1-PrettyResponse) |  |
+| StringifyMetadata | [StringifyMetadataRequest](#bytebase-v1-StringifyMetadataRequest) | [StringifyMetadataResponse](#bytebase-v1-StringifyMetadataResponse) |  |
 
  
 

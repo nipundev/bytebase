@@ -115,15 +115,17 @@
           {{ $t("two-factor.enabled") }}
         </span>
       </BBTableCell>
-      <BBTableCell class="whitespace-nowrap tooltip-wrapper w-36">
-        <span v-if="changeRoleTooltip(user)" class="tooltip">{{
-          changeRoleTooltip(user)
-        }}</span>
-        <WorkspaceRoleSelect
-          :role="user.userRole"
-          :disabled="!allowChangeRole(user)"
-          @update:role="changeRole(user, $event)"
-        />
+      <BBTableCell class="whitespace-nowrap w-36">
+        <NTooltip :disabled="!changeRoleTooltip(user)">
+          <template #trigger>
+            <WorkspaceRoleSelect
+              :role="user.userRole"
+              :disabled="!allowChangeRole(user)"
+              @update:role="changeRole(user, $event)"
+            />
+          </template>
+          {{ changeRoleTooltip(user) }}
+        </NTooltip>
       </BBTableCell>
       <BBTableCell>
         <BBButtonConfirm
@@ -162,13 +164,12 @@
     ref="removeSelfOwnerDialog"
     :style="'CRITICAL'"
     :ok-text="$t('common.confirm')"
-    :title="$t('settings.members.remove-self-owner.title')"
-    :description="$t('settings.members.remove-self-owner.description')"
+    :title="$t('settings.members.remove-self-admin.title')"
+    :description="$t('settings.members.remove-self-admin.description')"
   />
 </template>
 
 <script lang="ts" setup>
-import { toClipboard } from "@soerenmartius/vue3-clipboard";
 import { cloneDeep } from "lodash-es";
 import { computed, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
@@ -184,7 +185,7 @@ import {
 import { SYSTEM_BOT_USER_NAME } from "@/types";
 import { User, UserRole, UserType } from "@/types/proto/v1/auth_service";
 import { State } from "@/types/proto/v1/common";
-import { hasWorkspacePermissionV1 } from "@/utils";
+import { hasWorkspacePermissionV1, toClipboard } from "@/utils";
 import UserAvatar from "../UserAvatar.vue";
 import { copyServiceKeyToClipboardIfNeeded } from "./common";
 
@@ -243,7 +244,7 @@ const dataSource = computed((): BBTableSectionDataSource<User>[] => {
 
   const dataSource: BBTableSectionDataSource<User>[] = [];
   dataSource.push({
-    title: t("common.role.owner"),
+    title: t("common.role.admin"),
     list: ownerList,
   });
 
@@ -253,7 +254,7 @@ const dataSource = computed((): BBTableSectionDataSource<User>[] => {
   });
 
   dataSource.push({
-    title: t("common.role.developer"),
+    title: t("common.role.member"),
     list: developerList,
   });
 
@@ -342,8 +343,8 @@ const deactivateConfirmation = (user: User) => {
   const me = currentUserV1.value;
   if (user.name === me.name && user.userRole === UserRole.OWNER) {
     return {
-      title: t("settings.members.remove-self-owner.title"),
-      description: t("settings.members.remove-self-owner.description"),
+      title: t("settings.members.remove-self-admin.title"),
+      description: t("settings.members.remove-self-admin.description"),
     };
   }
   return {

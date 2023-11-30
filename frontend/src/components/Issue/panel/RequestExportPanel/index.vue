@@ -1,11 +1,10 @@
 <template>
-  <NDrawer
+  <Drawer
     :show="true"
     width="auto"
-    :auto-focus="false"
     @update:show="(show: boolean) => !show && $emit('close')"
   >
-    <NDrawerContent
+    <DrawerContent
       :title="$t('quick-action.request-export-permission')"
       :closable="true"
       class="w-[50rem] max-w-[100vw] relative"
@@ -19,7 +18,12 @@
           <ProjectSelect
             class="!w-60 shrink-0"
             :project="state.projectId"
-            :filter-by-current-user="false"
+            :filter-by-current-user="true"
+            :allowed-project-role-list="[
+              PresetRoleType.OWNER,
+              PresetRoleType.DEVELOPER,
+              PresetRoleType.VIEWER,
+            ]"
             @update:project="handleProjectSelect"
           />
         </div>
@@ -51,14 +55,12 @@
               SQL
               <RequiredStar />
             </span>
-            <div class="w-full h-[300px] border rounded">
+            <div class="w-full h-[300px]">
               <MonacoEditor
-                class="w-full h-full py-2"
-                :value="state.statement"
+                v-model:content="state.statement"
+                class="w-full h-full rounded border"
                 :auto-focus="false"
-                :language="'sql'"
                 :dialect="dialect"
-                @change="(value: string) => (state.statement = value)"
               />
             </div>
           </div>
@@ -126,29 +128,26 @@
           </NButton>
         </div>
       </template>
-    </NDrawerContent>
-  </NDrawer>
+    </DrawerContent>
+  </Drawer>
 </template>
 
 <script lang="ts" setup>
 import dayjs from "dayjs";
 import { head, isUndefined } from "lodash-es";
-import {
-  NButton,
-  NDrawer,
-  NDrawerContent,
-  NInput,
-  NInputNumber,
-} from "naive-ui";
+import { NButton, NInput, NInputNumber } from "naive-ui";
 import { computed, onMounted, reactive } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import ExpirationSelector from "@/components/ExpirationSelector.vue";
+import { MonacoEditor } from "@/components/MonacoEditor";
 import RequiredStar from "@/components/RequiredStar.vue";
 import {
   ProjectSelect,
   EnvironmentSelect,
   DatabaseSelect,
+  DrawerContent,
+  Drawer,
 } from "@/components/v2";
 import { issueServiceClient } from "@/grpcweb";
 import {

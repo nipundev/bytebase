@@ -8,7 +8,7 @@ import {
   TableConfig,
   SchemaConfig,
 } from "@/types/proto/v1/database_service";
-import { isGhostTable } from "@/utils";
+import { isGhostTable, keyBy } from "@/utils";
 
 type Status = "normal" | "created" | "dropped";
 
@@ -182,21 +182,19 @@ export const convertSchemaMetadataList = (
   schemaConfigList: SchemaConfig[]
 ): Schema[] => {
   // Compose all tables of each schema.
+  const schemaConfigByName = keyBy(schemaConfigList, (sc) => sc.name);
   const schemaList: Schema[] = schemaMetadataList.map((schemaMetadata) =>
     convertSchemaMetadataToSchema(
       schemaMetadata,
       "normal",
-      schemaConfigList.find(
-        (schemaConfig) => schemaConfig.name === schemaMetadata.name
-      )
+      schemaConfigByName.get(schemaMetadata.name)
     )
   );
 
   // Build foreign keys for schema and referenced schema.
+  const schemaByName = keyBy(schemaList, (s) => s.name);
   for (const schemaMetadata of schemaMetadataList) {
-    const schema = schemaList.find(
-      (schema) => schema.name === schemaMetadata.name
-    );
+    const schema = schemaByName.get(schemaMetadata.name);
     if (!schema) {
       continue;
     }

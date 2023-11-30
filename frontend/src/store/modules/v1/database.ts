@@ -18,7 +18,6 @@ import { User } from "@/types/proto/v1/auth_service";
 import {
   Database,
   ListDatabasesRequest,
-  SearchDatabasesRequest,
   UpdateDatabaseRequest,
   DiffSchemaRequest,
 } from "@/types/proto/v1/database_service";
@@ -72,11 +71,6 @@ export const useDatabaseV1Store = defineStore("database_v1", () => {
     const composedDatabaseList = await upsertDatabaseMap(databases);
     return composedDatabaseList;
   };
-  const searchDatabaseList = async (args: Partial<SearchDatabasesRequest>) => {
-    const { databases } = await databaseServiceClient.searchDatabases(args);
-    const composedDatabaseList = await upsertDatabaseMap(databases);
-    return composedDatabaseList;
-  };
   const syncDatabase = async (database: string) => {
     await databaseServiceClient.syncDatabase({
       name: database,
@@ -107,21 +101,26 @@ export const useDatabaseV1Store = defineStore("database_v1", () => {
   const getDatabaseByName = (name: string) => {
     return databaseMapByName.get(name) ?? unknownDatabase();
   };
-  const fetchDatabaseByName = async (name: string) => {
-    const database = await databaseServiceClient.getDatabase({
-      name,
-    });
+  const fetchDatabaseByName = async (name: string, silent = false) => {
+    const database = await databaseServiceClient.getDatabase(
+      {
+        name,
+      },
+      {
+        silent,
+      }
+    );
 
     const [composed] = await upsertDatabaseMap([database]);
 
     return composed;
   };
-  const getOrFetchDatabaseByName = async (name: string) => {
+  const getOrFetchDatabaseByName = async (name: string, silent = false) => {
     const existed = databaseMapByName.get(name);
     if (existed) {
       return existed;
     }
-    await fetchDatabaseByName(name);
+    await fetchDatabaseByName(name, silent);
     return getDatabaseByName(name);
   };
   const getDatabaseByUID = (uid: string) => {
@@ -130,15 +129,20 @@ export const useDatabaseV1Store = defineStore("database_v1", () => {
 
     return databaseMapByUID.get(uid) ?? unknownDatabase();
   };
-  const fetchDatabaseByUID = async (uid: string) => {
-    const database = await databaseServiceClient.getDatabase({
-      name: `instances/-/databases/${uid}`,
-    });
+  const fetchDatabaseByUID = async (uid: string, silent = false) => {
+    const database = await databaseServiceClient.getDatabase(
+      {
+        name: `instances/-/databases/${uid}`,
+      },
+      {
+        silent,
+      }
+    );
     const [composed] = await upsertDatabaseMap([database]);
 
     return composed;
   };
-  const getOrFetchDatabaseByUID = async (uid: string) => {
+  const getOrFetchDatabaseByUID = async (uid: string, silent = false) => {
     if (uid === String(EMPTY_ID)) return emptyDatabase();
     if (uid === String(UNKNOWN_ID)) return unknownDatabase();
 
@@ -146,7 +150,7 @@ export const useDatabaseV1Store = defineStore("database_v1", () => {
     if (existed) {
       return existed;
     }
-    await fetchDatabaseByUID(uid);
+    await fetchDatabaseByUID(uid, silent);
     return getDatabaseByUID(uid);
   };
   const updateDatabase = async (params: UpdateDatabaseRequest) => {
@@ -171,7 +175,6 @@ export const useDatabaseV1Store = defineStore("database_v1", () => {
     reset,
     databaseList,
     fetchDatabaseList,
-    searchDatabaseList,
     syncDatabase,
     databaseListByUser,
     databaseListByProject,
@@ -200,7 +203,7 @@ export const useSearchDatabaseV1List = (
     () => JSON.stringify(unref(args)),
     () => {
       ready.value = false;
-      store.searchDatabaseList(unref(args)).then((list) => {
+      store.fetchDatabaseList(unref(args)).then((list) => {
         databaseList.value = list;
         ready.value = true;
       });
@@ -234,6 +237,8 @@ export const useDatabaseV1ByName = (name: MaybeRef<string>) => {
   };
 };
 
+// useDatabaseV1ByUID returns a database by uid.
+// Mainly using in SQL Editor.
 export const useDatabaseV1ByUID = (uid: MaybeRef<string>) => {
   const store = useDatabaseV1Store();
   const ready = ref(true);
@@ -243,7 +248,7 @@ export const useDatabaseV1ByUID = (uid: MaybeRef<string>) => {
       if (uid !== String(UNKNOWN_ID)) {
         if (store.getDatabaseByUID(uid).uid === String(UNKNOWN_ID)) {
           ready.value = false;
-          store.fetchDatabaseByUID(uid).then(() => {
+          store.fetchDatabaseByUID(uid, true /* silent */).then(() => {
             ready.value = true;
           });
         }

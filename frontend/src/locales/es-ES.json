@@ -50,8 +50,6 @@
     "environment": "Entorno",
     "environments": "Entornos",
     "environment-name": "Nombre del entorno",
-    "bookmark": "Marcador",
-    "bookmarks": "Marcadores",
     "quick-action": "Acción rápida",
     "archive": "Archivo",
     "archived": "Archivada",
@@ -78,10 +76,11 @@
     "visit": "Visitar",
     "role": {
       "self": "Rol",
+      "admin": "Administrador",
       "dba": "DBA",
+      "member": "Miembro",
       "owner": "Propietario",
       "developer": "Desarrollador",
-      "member": "Miembro",
       "exporter": "Exportador",
       "querier": "Querier",
       "releaser": "Liberador",
@@ -277,7 +276,8 @@
     "license": "Licencia",
     "show-all": "Mostrar todo",
     "view-details": "Ver detalles",
-    "force-verb": "forzar {verbo}"
+    "force-verb": "forzar {verbo}",
+    "nothing-changed": "nada ha cambiado"
   },
   "error-page": {
     "go-back-home": "Volver al inicio"
@@ -410,7 +410,9 @@
       "enqueued-with-rollout-time": "Esperando para ejecutar, {time} para ejecutar.",
       "dumping-schema-before-executing-sql": "Listo para ejecutar, exportando esquema.",
       "executing-sql": "Ejecutando SQL.",
-      "dumping-schema-after-executing-sql": "Ejecución SQL completada, exportando esquema ahora."
+      "dumping-schema-after-executing-sql": "Ejecución SQL completada, exportando esquema ahora.",
+      "executing-sql-detail": "Ejecutando SQL {actual} de {total}, desde ({startLine}, {startColumn}) hasta ({endLine}, {endColumn}).",
+      "failed-sql-detail": "La ejecución falló desde ({startLine}, {startColumn}) hasta ({endLine}, {endColumn}): {message}."
     }
   },
   "banner": {
@@ -508,8 +510,8 @@
       },
       "tooltip": {
         "upgrade": "Actualice para habilitar la gestión de roles",
-        "not-allow-edit": "Solo el propietario puede cambiar el rol",
-        "not-allow-remove": "No se puede eliminar el último propietario",
+        "not-allow-edit": "Solo el administrador puede cambiar el rol",
+        "not-allow-remove": "No se puede eliminar el último administrador",
         "project-role-provider-gitlab": "Mapeado desde el rol {rawRole} en el proyecto correspondiente de GitLab.",
         "cannot-change-role-of-systembot-or-service-account": "No se puede cambiar el rol de la cuenta bot del sistema o de la cuenta de servicio"
       },
@@ -521,9 +523,9 @@
       "service-key-copied": "Clave de Servicio copiada al portapapeles, por favor manténgala en secreto.",
       "create-as-service-account": "Crear como cuenta de servicio",
       "show-inactive": "Mostrar miembros inactivos",
-      "remove-self-owner": {
-        "title": "¿Estás seguro de revocarte PROPIETARIO?",
-        "description": "Asegúrese de que los PROPIETARIOS restantes puedan iniciar sesión; de lo contrario, nadie podrá administrar los usuarios."
+      "remove-self-admin": {
+        "title": "¿Estás seguro de revocarte @.lower:common.role.admin?",
+        "description": "Asegúrese de que los @.lower:common.role.admin restantes puedan iniciar sesión; de lo contrario, nadie podrá administrar los usuarios."
       }
     },
     "im-integration": {
@@ -535,7 +537,7 @@
       "create": "Crear SSO",
       "description": "Inicio de Sesión Único (SSO) es un método de autenticación que permite a los usuarios autenticarse en múltiples aplicaciones y sitios web a través de un solo conjunto de credenciales.",
       "archive": "Archivar este SSO",
-      "archive-info": "El SSO archivado no se mostrará en la interfaz normal. Puede hacer clic en \"Archivar\" en la parte inferior izquierda para encontrarlo y restaurarlo.",
+      "archive-info": "Los SSO archivados no se mostrarán.",
       "restore": "Restaurar este SSO",
       "form": {
         "type": "Tipo",
@@ -583,7 +585,7 @@
     "general": {
       "workspace": {
         "branding": "Marca",
-        "only-owner-can-edit": "Solo el propietario del espacio de trabajo puede actualizar la configuración.",
+        "only-admin-can-edit": "Solo el administrador del espacio de trabajo puede actualizar la configuración.",
         "logo": "Logo",
         "logo-aspect": "El tamaño sugerido para el logo debería tener una proporción de 5:2, por ejemplo, 100 x 40.",
         "select-logo": "Subir un archivo",
@@ -595,12 +597,12 @@
           "self": "Marca de agua",
           "update-success": "Configuración de marca de agua actualizada",
           "description": "Mostrar marcas de agua en las páginas, incluyendo el nombre de usuario, el ID y el correo electrónico.",
-          "only-owner-can-edit": "Solo el propietario del espacio de trabajo puede actualizar la configuración de la marca de agua.",
+          "only-admin-can-edit": "Solo el administrador del espacio de trabajo puede actualizar la configuración de la marca de agua.",
           "enable": "Activar marca de agua"
         },
         "disallow-signup": {
           "enable": "Deshabilitar el registro de autoservicio",
-          "description": "Una vez deshabilitado, los usuarios no pueden registrarse por sí mismos y solo pueden ser invitados por el propietario del espacio de trabajo."
+          "description": "Una vez deshabilitado, los usuarios no pueden registrarse por sí mismos y solo pueden ser invitados por el administrador del espacio de trabajo."
         },
         "require-2fa": {
           "enable": "Requerir autenticación de dos factores para todos los usuarios",
@@ -631,7 +633,7 @@
         "announcement": {
           "self": "Anuncio",
           "update-success": "Configuración de anuncios actualizada.",
-          "owner-or-dba-can-edit": "Solo el propietario del espacio de trabajo o el DBA pueden actualizar la configuración de anuncios."
+          "admin-or-dba-can-edit": "Solo el administrador del espacio de trabajo o el DBA pueden actualizar la configuración de anuncios."
         },
         "announcement-alert-level": {
           "description": "Level",
@@ -669,27 +671,26 @@
       "description": "A las siguientes columnas se les asignan niveles de enmascaramiento explícitamente y tienen prioridad sobre la regla de enmascaramiento global.",
       "remove-sensitive-column-tips": "¿Exponer esta columna?",
       "sensitive-column-list": "Columnas Explícitas Enmascaradas",
-      "global-masking-rule": "Regla de enmascaramiento global",
+      "global-masking-rule": "Regla De Enmascaramiento Global",
       "grant-access": "Autorizará el acceso",
       "never-expires": "Nunca expira",
       "global-rules": {
         "self": "Regla de enmascaramiento global",
         "description": "Utilice la regla global para aplicar niveles de enmascaramiento por lotes, p. Todas las columnas denominadas \"correo electrónico\" se enmascararán con el nivel \"Parcial\".",
         "condition-order": "Orden de condición",
-        "add-rule": "Agregar regla",
         "re-order": "Reordenar",
         "delete-rule-tip": "¿Eliminar esta regla?",
         "check-rules": "Check global rules"
       },
       "semantic-types": {
-        "self": "Tipos semánticos",
-        "add-type": "Agregar tipo",
-        "add-from-template": "Agregar desde plantilla",
+        "self": "Tipos Semánticos",
+        "label": "Las columnas que tengan el mismo tipo semántico utilizarán los mismos algoritmos de enmascaramiento.",
+        "use-predefined-type": "Utiliza el Tipo Predefinido",
         "table": {
-          "semantic-type": "Tipo semántico",
+          "semantic-type": "Tipo Semántico",
           "description": "Descripción",
-          "full-masking-algorithm": "Algoritmo de enmascaramiento completo",
-          "partial-masking-algorithm": "Algoritmo de enmascaramiento parcial",
+          "full-masking-algorithm": "Algoritmo De Enmascaramiento Completo",
+          "partial-masking-algorithm": "Algoritmo De Enmascaramiento Parcial",
           "delete": "¿Eliminar este tipo semántico?"
         },
         "template": {
@@ -744,15 +745,24 @@
         "column-effective-masking-tips": "Esta columna no configura su propio nivel de enmascaramiento.\nMostramos su nivel de enmascaramiento efectivo con reglas de enmascaramiento globales. {link}"
       },
       "algorithms": {
-        "self": "Algoritmo de enmascaramiento",
-        "add": "Agregar algoritmo",
+        "self": "Algoritmo De Enmascaramiento",
         "default": "Por defecto",
         "default-desc": "Utilice *** como máscara de datos",
         "table": {
           "title": "Título",
           "description": "Descripción",
-          "masking-type": "Tipo de enmascaramiento",
+          "masking-type": "Tipo De Enmascaramiento",
           "delete": "¿Eliminar este algoritmo?"
+        },
+        "error": {
+          "title-required": "Se requiere título",
+          "substitution-required": "Se requiere sustitución",
+          "substitution-length": "La sustitución debe ser inferior a 16 bytes",
+          "salt-required": "Se requiere sal",
+          "slice-required": "Se requiere rebanada",
+          "slice-invalid-number": "El inicio o el final del segmento no es un número válido",
+          "slice-number-range": "El final del corte debe ser más pequeño que el inicio",
+          "slice-overlap": "El rango de corte no puede superponerse"
         },
         "mask": "Máscara",
         "hash": "Picadillo",
@@ -773,8 +783,8 @@
         },
         "md5-mask": {
           "self": "Máscara MD5",
-          "salt": "Sal",
-          "salt-label": "La sal es el valor de la sal para generar un hash diferente al de la palabra sola."
+          "salt": "Sal (Salt)",
+          "salt-label": "La sal (Salt) se utiliza para generar un hash a partir del valor original."
         }
       },
       "masking-level": {
@@ -891,8 +901,8 @@
   },
   "issue": {
     "my-issues": "Mis Incidencias",
-    "waiting-approval": "Esperando Aprobación",
-    "waiting-rollout": "Esperando Implementación",
+    "waiting-approval": "A la espera de la aprobación",
+    "waiting-rollout": "Esperando el lanzamiento",
     "opened-by-at": "abierta por {creator} a las {time}",
     "commit-by-at": "commit {id} {title} por {author} a las {time}",
     "status-transition": {
@@ -984,7 +994,8 @@
           "description": "Buscar por estado de revisión del problema",
           "title": "Estado de aprobación"
         }
-      }
+      },
+      "hide": "Ocultar búsqueda avanzada"
     },
     "table": {
       "open": "Abierto",
@@ -1111,9 +1122,18 @@
     },
     "error": {
       "issue-is-not-open": "El tema no está abierto.",
-      "you-don-have-privilege-to-edit-this-issue": "No tienes privilegios para editar este número."
+      "you-don-have-privilege-to-edit-this-issue": "No tienes privilegios para editar este número.",
+      "you-are-not-allowed-to-perform-this-action": "No tienes permiso para realizar esta acción."
     },
-    "approval-requested": "Aprobación solicitada"
+    "approval-requested": "Aprobación solicitada",
+    "assignee": {
+      "current-assignee": "Asignatario actual",
+      "workspace-admins": "Administrador del espacio de trabajo",
+      "workspace-dbas": "DBA",
+      "project-owners": "Propietarios del proyecto",
+      "releasers-of-current-stage": "Liberadores de la etapa actual.",
+      "approvers-of-current-step": "Aprobadores del paso actual"
+    }
   },
   "alter-schema": {
     "vcs-enabled": "Este proyecto ha habilitado el control de versiones basado en VCS y seleccionar la base de datos a continuación lo llevará al repositorio Git correspondiente para iniciar el proceso de cambio.",
@@ -1203,7 +1223,7 @@
     "successfully-synced-schema-for-instance-instance-value-name": "Esquema sincronizado con éxito para la instancia '{0}'.",
     "archive-this-instance": "Archivar esta instancia",
     "archive-instance-instance-name": "¿Archivar la instancia '{0}'?",
-    "archived-instances-will-not-be-shown-on-the-normal-interface-you-can-still-restore-later-from-the-archive-page": "Las instancias archivadas no se mostrarán en la interfaz normal. Puede hacer clic en \"Archivar\" en la parte inferior izquierda para encontrarlas y restaurarlas.",
+    "archived-instances-will-not-be-displayed": "Las instancias archivadas no se mostrarán.",
     "restore-this-instance": "Restaurar esta instancia",
     "restore": "Restaurar",
     "restore-instance-instance-name-to-normal-state": "¿Restaurar la instancia '{0}' al estado normal?",
@@ -1225,7 +1245,7 @@
     "show-how-to-create": "Mostrar cómo crear",
     "below-is-an-example-to-create-user-bytebase-with-password": "A continuación se muestra un ejemplo para crear el usuario 'bytebase {'@'}%' con contraseña",
     "your_db_pwd": "SU_DB_PWD",
-    "no-read-only-data-source-warn-for-owner-dba": "La instancia no ha configurado una conexión de solo lectura, por favor considere agregar una.",
+    "no-read-only-data-source-warn-for-admin-dba": "La instancia no ha configurado una conexión de solo lectura, por favor considere agregar una.",
     "no-read-only-data-source-warn-for-developer": "La instancia no ha configurado una conexión de solo lectura, solicite a su DBA que agregue una.",
     "sentence": {
       "host": {
@@ -1315,7 +1335,7 @@
     "id-description": "El ID del entorno es el identificador único para su entorno. No puede cambiarlo después de creado.",
     "select": "Seleccionar entorno",
     "archive": "Archivar este entorno",
-    "archive-info": "Los entornos archivados no se mostrarán en la interfaz normal. Puede hacer clic en \"Archivar\" en la parte inferior izquierda para encontrar y restaurarlo.",
+    "archive-info": "Los entornos archivados no se mostrarán.",
     "create": "Crear entorno",
     "restore": "Restaurar este entorno",
     "successfully-updated-environment": "entorno '{name}' actualizado exitosamente.",
@@ -1386,15 +1406,8 @@
       "name": "Política de implementación",
       "tip": "La política se aplica retrospectivamente a las incidencias.",
       "info": "Para implementar cambios en la base de datos, esta configuración controla si la implementación requiere aprobación manual.",
-      "manual": "Implementar manual",
-      "manual-info": "Requiere hacer clic en el botón \"Implementar\" manualmente, y luego se ejecutará el cambio.",
       "auto": "Implementar automático",
       "auto-info": "Si se aprueban todas las comprobaciones, el cambio se implementará y ejecutará automáticamente.",
-      "assignee-group": {
-        "workspace-owner-or-dba": "Requiere implementación del DBA o del propietario del espacio de trabajo.",
-        "project-owner": "Requiere implementación del propietario del proyecto."
-      },
-      "manual-by-dba-or-workspace-owner": "Requiere implementación del DBA o del propietario del espacio de trabajo.",
       "manual-by-project-owner": "Dueño del proyecto",
       "manual-by-project-releaser": "Liberador de proyecto",
       "manual-by-issue-creator": "Creador del problema",
@@ -1402,15 +1415,7 @@
       "manual-by-dedicated-roles": "Implementación manual por roles especializados",
       "manual-by-dedicated-roles-info": "Permita que cualquiera de los siguientes roles seleccionados haga clic en el botón \"Implementar\" y luego se ejecutará el cambio.",
       "manual-by-dba": "DBA",
-      "manual-by-workspace-owner": "Propietario del espacio de trabajo",
-      "role": {
-        "workspace-owner": "Propietario del espacio de trabajo",
-        "dba": "DBA",
-        "project-owner": "Dueño del proyecto",
-        "project-releaser": "Liberador de proyecto",
-        "issue-creator": "Creador del problema",
-        "last-approver": "El último aprobador del flujo de aprobación personalizado"
-      }
+      "manual-by-workspace-admin": "Administrador del espacio de trabajo"
     },
     "backup": {
       "name": "Política de programación de copias de seguridad de la base de datos",
@@ -1667,7 +1672,9 @@
     "classification": {
       "self": "Clasificación"
     },
-    "recent": "Reciente"
+    "recent": "Reciente",
+    "partitioned": "Particionado",
+    "partition-tabled": "Tabla particionada"
   },
   "repository": {
     "branch-observe-file-change": "La rama donde Bytebase observa el cambio de archivo.",
@@ -1717,7 +1724,7 @@
     "configure-deploy": "Configurar implementación",
     "choose-git-provider-description": "Elige el proveedor Git donde se encuentran alojados tus scripts de esquema de base de datos (.sql). Cuando subas el script modificado al repositorio Git, Bytebase creará automáticamente un pipeline para aplicar el cambio de esquema a la base de datos.",
     "choose-git-provider-visit-workspace": "Visita la configuración de {workspace} para agregar más proveedores Git.",
-    "choose-git-provider-contact-workspace-owner": "Contacta al propietario de Bytebase si deseas que aparezcan otros proveedores Git aquí. Bytebase actualmente admite GitLab EE/CE autoalojado y planea agregar GitLab.com y GitHub Enterprise más adelante.",
+    "choose-git-provider-contact-workspace-admin": "Contacta al administrador de tu espacio de trabajo en Bytebase si deseas que aparezcan otros proveedores de Git aquí. Actualmente, Bytebase admite GitLab EE/CE autohospedado y planea agregar GitLab.com y GitHub Enterprise más adelante.",
     "select-repository-attention-gitlab": "Bytebase solo enumera los proyectos de GitLab que te otorgan al menos el rol de 'Mantenedor', lo que te permite configurar el webhook del proyecto para observar el evento de empuje de código.",
     "select-repository-attention-github": "Bytebase solo enumera los repositorios de GitHub en los que tienes permisos de administrador, lo que te permite configurar el webhook del repositorio para observar el evento de empuje de código.",
     "select-repository-attention-bitbucket": "Bytebase solo enumera los repositorios de Bitbucket en los que tienes permisos de administrador, lo que te permite configurar el webhook del repositorio para observar el evento de empuje de código.",
@@ -1846,6 +1853,14 @@
         "issue-task-run-status-change": {
           "title": "Cambio de estado de ejecución de tarea de incidencia",
           "label": "Cuando cambia el estado de la ejecución de la tarea que encierra la incidencia"
+        },
+        "notify-issue-approved": {
+          "title": "Asunto aprobado",
+          "label": "Cuando se aprueba la emisión"
+        },
+        "notify-pipeline-rollout": {
+          "title": "Se necesita implementar el problema",
+          "label": "Cuando el problema está esperando la implementación"
         }
       }
     },
@@ -1856,10 +1871,10 @@
       "member-placeholder": "Seleccionar usuario",
       "manage-member": "Administrar miembros",
       "owner": "@.upper:common.role.owner",
-      "developer": "@.upper:common.role.developer",
+      "developer": "@.upper:common.role.member",
       "archive": {
         "title": "Archivar proyecto",
-        "description": "El proyecto archivado no se mostrará en la interfaz normal. Puede hacer clic en \"Archivar\" en la parte inferior izquierda para encontrarlo y restaurarlo.",
+        "description": "Proyectos archivados no se mostrarán.",
         "btn-text": "Archivar este @.lower:{'common.project'}",
         "force": {
           "description": "Forzar a archivar. \nTodos los problemas relacionados se resolverán y todas las hojas relacionadas se eliminarán."
@@ -1875,7 +1890,7 @@
       "schema-path-template-sdl-description": "El archivo de esquema describe el esquema completo de la base de datos.",
       "branch-protection-rules": {
         "self": "Branch protection rules",
-        "add-rule": "Añadir regla",
+        "add-rule": "Agregar Regla",
         "branch-name-pattern": {
           "self": "Patrón de nombre de rama",
           "description": "Soporta comodines como feature/* o *-stable"
@@ -1886,7 +1901,7 @@
       }
     },
     "members": {
-      "description": "Los miembros del proyecto determinan el permiso para operar la base de datos y los problemas dentro del proyecto. El propietario del proyecto, el propietario del espacio de trabajo y el DBA del espacio de trabajo tienen permisos completos para el proyecto.",
+      "description": "Los miembros del proyecto determinan el permiso para operar la base de datos y los problemas dentro del proyecto. El propietario del proyecto, el administrador del espacio de trabajo y el DBA del espacio de trabajo tienen permisos completos para el proyecto.",
       "add-member": "Agregar miembro",
       "revoke-member": "Revocar miembro",
       "revoke-access": "Revocar acceso",
@@ -1935,7 +1950,7 @@
   },
   "gitops": {
     "setting": {
-      "description": "Bytebase admite el flujo de trabajo de GitOps, donde los scripts de migración de la base de datos se almacenan en el sistema de control de versiones (VCS) y los scripts de migración recién creados activarán automáticamente el cambio de base de datos correspondiente. Los propietarios de Bytebase administran todos los VCS aplicables aquí para que los propietarios de proyectos puedan vincular los proyectos con sus repositorios de Git desde estos VCS.",
+      "description": "Bytebase admite el flujo de trabajo de GitOps, donde los scripts de migración de la base de datos se almacenan en el sistema de control de versiones (VCS) y los scripts de migración recién creados activarán automáticamente el cambio de base de datos correspondiente. Los administrador de Bytebase administran todos los VCS aplicables aquí para que los propietarios de proyectos puedan vincular los proyectos con sus repositorios de Git desde estos VCS.",
       "description-highlight": "Si desea habilitar el inicio de sesión de terceros a través de sus VCS configurados, configure en SSO.",
       "add-git-provider": {
         "self": "Agregar un proveedor de Git",
@@ -2014,13 +2029,6 @@
         "delete-confirm": "¿Eliminar el proveedor de Git \"{name}\"?"
       }
     }
-  },
-  "archive": {
-    "archived": "Archivado",
-    "project-search-bar-placeholder": "Buscar nombre de @.lower:{'common.project'}",
-    "instance-search-bar-placeholder": "Buscar nombre de @.lower:{'common.instance'}",
-    "environment-search-bar-placeholder": "Buscar nombre de @.lower:{'common.environment'}",
-    "sso-search-bar-placeholder": "Buscar nombre de SSO"
   },
   "deployment-config": {
     "stage-n": "Etapa {n}",
@@ -2217,7 +2225,9 @@
       "description": "Consulta por lotes {count} bases de datos adicionales en {project}."
     },
     "executing-query": "Ejecutando consulta",
-    "grouping": "Agrupamiento"
+    "grouping": "Agrupamiento",
+    "previous-row": "Fila anterior",
+    "next-row": "siguiente fila"
   },
   "schema-editor": {
     "self": "Editor de esquema",
@@ -2236,7 +2246,7 @@
       "drop-table": "Eliminar tabla",
       "restore": "Restaurar",
       "add-column": "Agregar columna",
-      "add-from-template": "Añadir desde plantilla",
+      "add-from-template": "Agregar desde plantilla",
       "drop-column": "Eliminar columna",
       "sql-preview": "Vista previa SQL",
       "reset": "Restablecer",
@@ -2291,7 +2301,8 @@
       "schema-not-found": "Esquema no encontrado",
       "failed-to-fetch-database-schema": "Error al obtener el esquema de la base de datos",
       "invalid-schema": "Esquema no válido",
-      "cannot-drop-the-last-column": "No se puede eliminar la última columna"
+      "cannot-drop-the-last-column": "No se puede eliminar la última columna",
+      "cannot-change-config": "La configuración de la base de datos debe cambiarse con el esquema"
     },
     "confirm-to-close": {
       "title": "Confirmar para cerrar",
@@ -2359,13 +2370,13 @@
     "start-n-days-trial": "Comienza una prueba de {days} días (no se requiere tarjeta de crédito)",
     "successfully-start-trial": "Prueba gratuita iniciada con éxito por {days} días",
     "successfully-upgrade-trial": "Prueba gratuita actualizada con éxito a {plan}",
-    "require-subscription": "Esta función requiere {requiredPlan}, por favor compra la licencia Bytebase para desbloquear esta función.",
-    "feature-require-subscription": "{feature} requiere {requiredPlan}.",
-    "required-plan-with-trial": "Esta función requiere {requiredPlan}. {startTrial}.",
-    "trial-for-plan": "Puedes iniciar una prueba gratuita de {plan} por {days} días - no se requiere tarjeta de crédito",
-    "trial-for-days": "Puedes iniciar una prueba gratuita por {days} días - no se requiere tarjeta de crédito",
-    "upgrade-trial": "Puedes actualizar tu prueba gratuita a este plan",
-    "contact-to-upgrade": "Comuníquese con el propietario de su espacio de trabajo o DBA para actualizar el plan",
+    "require-subscription": "Esta función requiere una suscripción a {requiredPlan}. Compre una licencia de Bytebase para desbloquear esta función.",
+    "feature-require-subscription": "{feature} requiere suscripción a {requiredPlan}.",
+    "required-plan-with-trial": "Esta función requiere {requiredPlan}. {startTrial}",
+    "trial-for-plan": "Puedes iniciar una prueba gratuita de {plan} por {days} días - no se requiere tarjeta de crédito.",
+    "trial-for-days": "Puedes iniciar una prueba gratuita por {days} días - no se requiere tarjeta de crédito.",
+    "upgrade-trial": "Puedes actualizar tu prueba gratuita a este plan.",
+    "contact-to-upgrade": "Contacta al administrador de tu espacio de trabajo para actualizar el plan.",
     "upgrade-now": "Actualizar ahora",
     "instance-assignment": {
       "license": "Licencia",
@@ -2544,7 +2555,7 @@
       },
       "bb-feature-disallow-signup": {
         "title": "Deshabilitar el registro de autoservicio",
-        "desc": "Una vez deshabilitados, los usuarios no pueden registrarse por sí mismos y solo pueden ser invitados por el propietario del espacio de trabajo."
+        "desc": "Una vez deshabilitados, los usuarios no pueden registrarse por sí mismos y solo pueden ser invitados por el administrador del espacio de trabajo."
       },
       "bb-feature-instance-ssh-connection": {
         "title": "Instancia de Conexión SSH",
@@ -2612,7 +2623,7 @@
     "policy-duplicated": "La política de revisión se duplicó correctamente.",
     "rules": "Reglas",
     "filter": "Filtro",
-    "no-permission": "Solo el DBA o el propietario tienen permiso para crear o actualizar la política de revisión.",
+    "no-permission": "Solo el DBA o el administrador tiene permiso para crear o actualizar la política de revisión.",
     "disable": "Deshabilitar",
     "enable": "Habilitar",
     "delete": "Eliminar política de revisión SQL",
@@ -2662,6 +2673,8 @@
     "no-logs": "No hay registros de depuración",
     "count-of-logs": "Se recuperaron los últimos {count} registro(s) del servidor.",
     "debug-log-detail": "Detalles del registro de depuración",
+    "enabled": "El modo de depuración está habilitado.",
+    "open-debug-mode": "Habilitar depuración",
     "table": {
       "record-ts": "Hora",
       "method": "Método",
@@ -2874,7 +2887,6 @@
         "high": "Reglas de riesgo alto"
       },
       "active": "Activo",
-      "add-rule": "Agregar regla",
       "edit-rule": "Editar regla",
       "delete": "Eliminar regla de seguridad",
       "default-rules": {
@@ -2955,7 +2967,7 @@
         "order": "Orden",
         "approver": "Aprobador",
         "group": {
-          "WORKSPACE_OWNER": "Propietario del espacio de trabajo",
+          "WORKSPACE_OWNER": "Administrador del espacio de trabajo",
           "WORKSPACE_DBA": "DBA",
           "PROJECT_OWNER": "Propietario del proyecto",
           "PROJECT_MEMBER": "Miembro del proyecto"
@@ -3061,14 +3073,13 @@
     },
     "no-log-placeholder": {
       "admin": "Haga clic en el botón \"Configurar\" para obtener consultas lentas de las instancias de la base de datos o haga clic en el botón \"Sincronizar ahora\" para sincronizar los registros de consultas lentas de inmediato",
-      "developer": "Haga clic en el botón \"Sincronizar ahora\" para sincronizar los registros de consultas lentas inmediatamente o comuníquese con los propietarios/DBA de Bytebase para configurar consultas lentas"
+      "developer": "Haga clic en el botón \"Sincronizar ahora\" para sincronizar los registros de consultas lentas inmediatamente o comuníquese con los administradors/DBA de Bytebase para configurar consultas lentas"
     }
   },
   "schema-template": {
     "self": "Plantilla de esquema",
     "field-template": {
       "self": "Plantilla de campo",
-      "add": "Agregar plantilla de campo",
       "description": "Predefina la plantilla de campo, luego aplique la plantilla durante el cambio de esquema."
     },
     "column-type-restriction": {
@@ -3086,7 +3097,6 @@
     },
     "table-template": {
       "self": "Plantilla de tabla",
-      "add": "Agregar plantilla de tabla",
       "description": "Puede predefinir la plantilla de tabla y luego aplicar la plantilla durante el cambio de esquema."
     },
     "search-by-name-or-comment": "Buscar por nombre o comentario",
@@ -3130,25 +3140,25 @@
     "select": "Seleccionar rol",
     "select-roles": "Seleccionar roles",
     "title": "Título",
-    "owner": {
-      "description": "Rol de propietario del proyecto definido por el sistema"
-    },
-    "developer": {
-      "description": "Rol de desarrollador del proyecto definido por el sistema"
-    },
-    "exporter": {
-      "description": "Rol de exportador del proyecto definido por el sistema"
-    },
-    "querier": {
-      "description": "Rol de querier del proyecto definido por el sistema"
-    },
     "select-role": "Seleccionar rol",
     "expired-tip": "El papel puede haber expirado.",
+    "owner": {
+      "description": "Todas las permisos dentro del proyecto."
+    },
+    "developer": {
+      "description": "Todas las permisos de visualización, más permisos para solicitar cambios en la base de datos."
+    },
     "releaser": {
-      "description": "Rol de liberador de proyecto definido por el sistema"
+      "description": "Todas las permisos de visualización, más permisos para revisar solicitudes de cambios en la base de datos con fines de lanzamiento."
+    },
+    "querier": {
+      "description": "Permisos para realizar consultas a datos de la base de datos"
+    },
+    "exporter": {
+      "description": "Permisos para exportar datos de la base de datos."
     },
     "viewer": {
-      "description": "Rol de visor de base de datos de proyecto definido por el sistema"
+      "description": "Permisos de solo lectura para ver información básica del proyecto, acceder a las bases de datos e iniciar solicitudes de privilegios."
     }
   },
   "database-group": {

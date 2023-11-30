@@ -14,16 +14,20 @@ type DBSchema struct {
 	metadata *storepb.DatabaseSchemaMetadata
 	schema   []byte
 	config   *storepb.DatabaseConfig
-	internal *DatabaseMetadata
+
+	metadataInternal *DatabaseMetadata
+	configInternal   *DatabaseConfig
 }
 
 func NewDBSchema(metadata *storepb.DatabaseSchemaMetadata, schema []byte, config *storepb.DatabaseConfig) *DBSchema {
 	databaseMetadata := NewDatabaseMetadata(metadata)
+	databaseConfig := NewDatabaseConfig(config)
 	return &DBSchema{
-		metadata: metadata,
-		schema:   schema,
-		config:   config,
-		internal: databaseMetadata,
+		metadata:         metadata,
+		schema:           schema,
+		config:           config,
+		metadataInternal: databaseMetadata,
+		configInternal:   databaseConfig,
 	}
 }
 
@@ -40,7 +44,11 @@ func (dbs *DBSchema) GetConfig() *storepb.DatabaseConfig {
 }
 
 func (dbs *DBSchema) GetDatabaseMetadata() *DatabaseMetadata {
-	return dbs.internal
+	return dbs.metadataInternal
+}
+
+func (dbs *DBSchema) GetDatabaseConfig() *DatabaseConfig {
+	return dbs.configInternal
 }
 
 // TableExists checks if the table exists.
@@ -162,6 +170,62 @@ func (dbs *DBSchema) FindIndex(schemaName string, tableName string, indexName st
 	return nil
 }
 
+// DatabaseConfig is the config for a database.
+type DatabaseConfig struct {
+	internal map[string]*SchemaConfig
+}
+
+// NewDatabaseConfig creates a new database config.
+func NewDatabaseConfig(config *storepb.DatabaseConfig) *DatabaseConfig {
+	databaseConfig := &DatabaseConfig{
+		internal: make(map[string]*SchemaConfig),
+	}
+	if config == nil {
+		return databaseConfig
+	}
+	for _, schema := range config.SchemaConfigs {
+		schemaConfig := &SchemaConfig{
+			internal: make(map[string]*TableConfig),
+		}
+		for _, table := range schema.TableConfigs {
+			tableConfig := &TableConfig{
+				internal: make(map[string]*storepb.ColumnConfig),
+			}
+			for _, column := range table.ColumnConfigs {
+				tableConfig.internal[column.Name] = column
+			}
+			schemaConfig.internal[table.Name] = tableConfig
+		}
+		databaseConfig.internal[schema.Name] = schemaConfig
+	}
+	return databaseConfig
+}
+
+// GetSchemaConfig gets the schema config by name.
+func (d *DatabaseConfig) GetSchemaConfig(name string) *SchemaConfig {
+	return d.internal[name]
+}
+
+// SchemaConfig is the config for a schema.
+type SchemaConfig struct {
+	internal map[string]*TableConfig
+}
+
+// GetTableConfig gets the table config by name.
+func (s *SchemaConfig) GetTableConfig(name string) *TableConfig {
+	return s.internal[name]
+}
+
+// TableConfig is the config for a table.
+type TableConfig struct {
+	internal map[string]*storepb.ColumnConfig
+}
+
+// GetColumnConfig gets the column config by name.
+func (t *TableConfig) GetColumnConfig(name string) *storepb.ColumnConfig {
+	return t.internal[name]
+}
+
 // DatabaseMetadata is the metadata for a database.
 type DatabaseMetadata struct {
 	internal map[string]*SchemaMetadata
@@ -178,14 +242,10 @@ func NewDatabaseMetadata(metadata *storepb.DatabaseSchemaMetadata) *DatabaseMeta
 			internalViews:  make(map[string]*ViewMetadata),
 		}
 		for _, table := range schema.Tables {
-			tableMetadata := &TableMetadata{
-				internal: make(map[string]*storepb.ColumnMetadata),
+			tables, names := buildTablesMetadata(table)
+			for i, table := range tables {
+				schemaMetadata.internalTables[names[i]] = table
 			}
-			for _, column := range table.Columns {
-				tableMetadata.internal[column.Name] = column
-				tableMetadata.columns = append(tableMetadata.columns, column)
-			}
-			schemaMetadata.internalTables[table.Name] = tableMetadata
 		}
 		for _, view := range schema.Views {
 			schemaMetadata.internalViews[view.Name] = &ViewMetadata{}
@@ -233,10 +293,69 @@ func (s *SchemaMetadata) ListViewNames() []string {
 	return result
 }
 
+func buildTablesMetadata(table *storepb.TableMetadata) ([]*TableMetadata, []string) {
+	if table == nil {
+		return nil, nil
+	}
+	var result []*TableMetadata
+	var name []string
+	tableMetadata := &TableMetadata{
+		internal: make(map[string]*storepb.ColumnMetadata),
+	}
+	for _, column := range table.Columns {
+		tableMetadata.internal[column.Name] = column
+		tableMetadata.columns = append(tableMetadata.columns, column)
+	}
+	tableMetadata.rowCount = table.RowCount
+	result = append(result, tableMetadata)
+	name = append(name, table.Name)
+
+	if table.Partitions != nil {
+		partitionTables, partitionNames := buildTablesMetadataRecursive(table.Columns, table.Partitions, tableMetadata)
+		result = append(result, partitionTables...)
+		name = append(name, partitionNames...)
+	}
+	return result, name
+}
+
+// buildTablesMetadataRecursive builds the partition tables recursively,
+// returns the table metadata and the partition names, the length of them must be the same.
+func buildTablesMetadataRecursive(originalColumn []*storepb.ColumnMetadata, partitions []*storepb.TablePartitionMetadata, root *TableMetadata) ([]*TableMetadata, []string) {
+	if partitions == nil {
+		return nil, nil
+	}
+
+	var tables []*TableMetadata
+	var names []string
+
+	for _, partition := range partitions {
+		partitionMetadata := &TableMetadata{
+			partitionOf: root,
+			internal:    make(map[string]*storepb.ColumnMetadata),
+		}
+		for _, column := range originalColumn {
+			partitionMetadata.internal[column.Name] = column
+			partitionMetadata.columns = append(partitionMetadata.columns, column)
+		}
+		tables = append(tables, partitionMetadata)
+		names = append(names, partition.Name)
+		if partition.Subpartitions != nil {
+			subTables, subNames := buildTablesMetadataRecursive(originalColumn, partition.Subpartitions, partitionMetadata)
+			tables = append(tables, subTables...)
+			names = append(names, subNames...)
+		}
+	}
+	return tables, names
+}
+
 // TableMetadata is the metadata for a table.
 type TableMetadata struct {
+	// If partitionOf is not nil, it means this table is a partition table.
+	partitionOf *TableMetadata
+
 	internal map[string]*storepb.ColumnMetadata
 	columns  []*storepb.ColumnMetadata
+	rowCount int64
 }
 
 // GetColumn gets the column by name.
@@ -247,6 +366,10 @@ func (t *TableMetadata) GetColumn(name string) *storepb.ColumnMetadata {
 // GetColumns gets the columns.
 func (t *TableMetadata) GetColumns() []*storepb.ColumnMetadata {
 	return t.columns
+}
+
+func (t *TableMetadata) GetRowCount() int64 {
+	return t.rowCount
 }
 
 // ViewMetadata is the metadata for a view.

@@ -41,7 +41,7 @@
           :project="project"
           :readonly="readonly"
           :resource-type="'branch'"
-          :branches="[branch]"
+          :branches="branches"
         />
       </div>
       <div
@@ -51,7 +51,7 @@
         <MonacoEditor
           class="w-full h-full border rounded-lg overflow-auto"
           data-label="bb-schema-editor-sql-editor"
-          :value="rawSQLPreviewState.value"
+          :content="rawSQLPreviewState.value"
           :readonly="true"
           :auto-focus="false"
         />
@@ -70,8 +70,9 @@ import {
   useDatabaseV1Store,
   useSchemaEditorV1Store,
 } from "@/store";
+import { ComposedProject } from "@/types";
 import { SchemaDesign } from "@/types/proto/v1/schema_design_service";
-import { ComposedProject } from "@/types/v1";
+import { MonacoEditor } from "../MonacoEditor";
 import {
   mergeSchemaEditToMetadata,
   validateDatabaseMetadata,
@@ -105,6 +106,9 @@ const rawSQLPreviewState = reactive({
 const baselineDatabase = computed(() => {
   return databaseStore.getDatabaseByName(props.branch.baselineDatabase);
 });
+
+// Avoid to create array or object literals in template to improve performance
+const branches = computed(() => [props.branch]);
 
 const handleChangeTab = async (tab: TabType) => {
   state.selectedTab = tab;

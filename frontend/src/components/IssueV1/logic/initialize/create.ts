@@ -40,7 +40,6 @@ import {
 import { nextUID } from "../base";
 import { sheetNameForSpec } from "../plan";
 import { createEmptyLocalSheet, getLocalSheetByName } from "../sheet";
-import { trySetDefaultAssignee } from "./assignee";
 
 export type InitialSQL = {
   sqlList?: string[];
@@ -96,8 +95,6 @@ export const createIssueSkeleton = async (query: Record<string, string>) => {
   const rollout = await previewPlan(plan, params);
   issue.rollout = rollout.name;
   issue.rolloutEntity = rollout;
-
-  await trySetDefaultAssignee(issue);
 
   const description = query.description;
   if (description) {
@@ -498,7 +495,7 @@ export const prepareDatabaseList = async (
 };
 
 const prepareDatabaseListByProject = async (project: string) => {
-  await useDatabaseV1Store().searchDatabaseList({
+  await useDatabaseV1Store().fetchDatabaseList({
     parent: `instances/-`,
     filter: `project == "${project}"`,
   });

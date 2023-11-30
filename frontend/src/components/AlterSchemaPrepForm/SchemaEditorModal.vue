@@ -2,7 +2,7 @@
   <BBModal
     :title="$t('database.edit-schema')"
     :trap-focus="false"
-    class="schema-editor-modal-container !w-[96rem] h-auto overflow-auto !max-w-[calc(100%-40px)] !max-h-[calc(100%-40px)]"
+    class="schema-editor-modal-container !w-[96rem] h-auto overflow-auto !max-w-[calc(100vw-40px)] !max-h-[calc(100vh-40px)]"
     @close="dismissModal"
   >
     <div
@@ -87,12 +87,11 @@
           </div>
         </div>
         <MonacoEditor
+          v-model:content="state.editStatement"
           class="w-full h-full border border-b-0"
           data-label="bb-schema-editor-sql-editor"
-          :value="state.editStatement"
           :auto-focus="false"
           :dialect="dialectOfEngineV1(databaseEngine)"
-          @change="handleStatementChange"
         />
       </div>
     </div>
@@ -123,10 +122,9 @@
 
   <!-- Close modal confirm dialog -->
   <ActionConfirmModal
-    v-if="state.showActionConfirmModal"
+    v-model:show="state.showActionConfirmModal"
     :title="$t('schema-editor.confirm-to-close.title')"
     :description="$t('schema-editor.confirm-to-close.description')"
-    @close="state.showActionConfirmModal = false"
     @confirm="emit('close')"
   />
 </template>
@@ -155,7 +153,7 @@ import {
 import { Engine } from "@/types/proto/v1/common";
 import { DatabaseMetadata } from "@/types/proto/v1/database_service";
 import { TenantMode } from "@/types/proto/v1/project_service";
-import MonacoEditor from "../MonacoEditor";
+import { MonacoEditor } from "../MonacoEditor";
 import { provideSQLCheckContext } from "../SQLCheck";
 import {
   initialSchemaConfigToMetadata,
@@ -266,10 +264,6 @@ const handleChangeTab = (tab: TabType) => {
   state.selectedTab = tab;
 };
 
-const handleStatementChange = (value: string) => {
-  state.editStatement = value;
-};
-
 const dismissModal = () => {
   if (allowPreviewIssue.value) {
     state.showActionConfirmModal = true;
@@ -357,6 +351,17 @@ const fetchStatementMapWithSchemaEditor = async () => {
       targetMetadata,
       engine: database.instanceEntity.engine,
     });
+    if (
+      diff === "" &&
+      !isEqual(sourceMetadata.schemaConfigs, targetMetadata.schemaConfigs)
+    ) {
+      pushNotification({
+        module: "bytebase",
+        style: "WARN",
+        title: t("schema-editor.message.cannot-change-config"),
+      });
+      return;
+    }
     statementMap.set(database.uid, diff);
   }
   return statementMap;
@@ -508,7 +513,7 @@ const generateIssueName = (
 };
 </script>
 
-<style>
+<style lang="postcss">
 .schema-editor-modal-container > .modal-container {
   @apply w-full h-[46rem] overflow-auto grid;
   grid-template-rows: min-content 1fr min-content;

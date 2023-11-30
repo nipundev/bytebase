@@ -50,8 +50,6 @@
     "environment": "环境",
     "environments": "环境",
     "environment-name": "环境名",
-    "bookmark": "书签",
-    "bookmarks": "书签",
     "quick-action": "快捷操作",
     "archive": "归档",
     "archived": "已归档",
@@ -78,10 +76,11 @@
     "visit": "访问",
     "role": {
       "self": "角色",
+      "admin": "管理员",
       "dba": "DBA",
+      "member": "成员",
       "owner": "所有者",
       "developer": "开发者",
-      "member": "成员",
       "exporter": "数据导出者",
       "querier": "数据查询者",
       "releaser": "发布者",
@@ -275,7 +274,8 @@
     "license": "证书",
     "show-all": "显示全部",
     "view-details": "查看详情",
-    "force-verb": "强制{verb}"
+    "force-verb": "强制{verb}",
+    "nothing-changed": "没有改变"
   },
   "error-page": {
     "go-back-home": "回到主页"
@@ -408,7 +408,9 @@
       "enqueued-with-rollout-time": "等待执行，{time}后执行。",
       "dumping-schema-before-executing-sql": "准备执行，正在导出 schema。",
       "executing-sql": "正在执行 SQL。",
-      "dumping-schema-after-executing-sql": "SQL 执行完毕，正在导出 schema。"
+      "executing-sql-detail": "正在执行 SQL {current} of {total}，从 ({startLine}, {startColumn}) 到 ({endLine}, {endColumn})。",
+      "dumping-schema-after-executing-sql": "SQL 执行完毕，正在导出 schema。",
+      "failed-sql-detail": "从 ({startLine}, {startColumn}) 到 ({endLine}, {endColumn}) 的执行失败：{message}。"
     }
   },
   "banner": {
@@ -506,8 +508,8 @@
       },
       "tooltip": {
         "upgrade": "升级到付费方案来解锁角色管理",
-        "not-allow-edit": "只有所有者才能改变角色",
-        "not-allow-remove": "不能移除最后一个所有者",
+        "not-allow-edit": "只有管理员才能改变角色",
+        "not-allow-remove": "不能移除最后一个管理员",
         "project-role-provider-gitlab": "同步自对应 GitLab 项目的 {rawRole} 角色",
         "cannot-change-role-of-systembot-or-service-account": "不能修改机器人助手和服务账号的角色"
       },
@@ -519,9 +521,9 @@
       "service-key-copied": "Service Key 已复制，请勿泄漏",
       "create-as-service-account": "创建为服务账号",
       "show-inactive": "查看未激活的成员",
-      "remove-self-owner": {
-        "title": "请确认您要移除您的 OWNER 角色。",
-        "description": "请确保剩下的 Owner 成员可以登录，否则就无人可以管理用户了。"
+      "remove-self-admin": {
+        "title": "请确认您要移除您的@.lower:common.role.admin角色。",
+        "description": "请确保剩下的@.lower:common.role.admin成员可以登录，否则就无人可以管理用户了。"
       }
     },
     "im-integration": {
@@ -533,7 +535,7 @@
       "create": "创建 SSO",
       "description": "单点登录（SSO）是一种认证方法，使用户能够通过其他应用程序和网站来进行登录。",
       "archive": "归档该 SSO",
-      "archive-info": "已归档 SSO 不会显示，您可以通过点击页面左下方的 \"归档\"来恢复。",
+      "archive-info": "已归档 SSO 将不再显示。",
       "restore": "恢复该 SSO",
       "form": {
         "type": "类型",
@@ -582,7 +584,7 @@
     "general": {
       "workspace": {
         "branding": "品牌",
-        "only-owner-can-edit": "仅管理员可以更改此设置",
+        "only-admin-can-edit": "仅管理员可以更改此设置",
         "logo": "Logo",
         "logo-aspect": "Logo 建议为 5:2 的宽:高比例（例如 100 x 40 像素）",
         "select-logo": "选择",
@@ -594,7 +596,7 @@
           "self": "水印",
           "update-success": "水印设置已更新",
           "description": "在页面上显示水印，包含用户名、ID 和 Email。",
-          "only-owner-can-edit": "仅管理员可以更新水印设置",
+          "only-admin-can-edit": "仅管理员可以更新水印设置",
           "enable": "开启水印"
         },
         "disallow-signup": {
@@ -642,7 +644,7 @@
         "announcement": {
           "self": "公告",
           "update-success": "公告设置已更新。",
-          "owner-or-dba-can-edit": "只有工作区所有者或 DBA 可以更新公告设置。"
+          "admin-or-dba-can-edit": "只有管理员或 DBA 可以更新公告设置。"
         },
         "announcement-alert-level": {
           "description": "等级",
@@ -675,15 +677,14 @@
         "self": "全局脱敏规则",
         "description": "全局规则用于批量指定脱敏程度，比如所有列名是 email 的字段都被设置为半脱敏。",
         "condition-order": "条件序列",
-        "add-rule": "添加规则",
         "re-order": "排序",
         "delete-rule-tip": "删除这条规则？",
         "check-rules": "查看全局配置"
       },
       "semantic-types": {
         "self": "语义类型",
-        "add-type": "新增类型",
-        "add-from-template": "从模板添加",
+        "label": "具有相同语义类型的列会使用相同的脱敏算法。",
+        "use-predefined-type": "使用预定义类型",
         "table": {
           "semantic-type": "语义类型",
           "description": "描述",
@@ -744,7 +745,6 @@
       },
       "algorithms": {
         "self": "脱敏算法",
-        "add": "添加算法",
         "default": "默认",
         "default-desc": "使用 *** 为数据遮挡",
         "table": {
@@ -753,12 +753,22 @@
           "masking-type": "算法类型",
           "delete": "删除该算法？"
         },
+        "error": {
+          "title-required": "请填写算法名称",
+          "substitution-required": "请填写遮掩字符串",
+          "substitution-length": "遮掩字符串长度不能超过 16 个字符",
+          "salt-required": "请填写盐值",
+          "slice-required": "遮掩范围不能为空",
+          "slice-invalid-number": "遮掩范围起始值和结束值必须是数字",
+          "slice-number-range": "遮掩范围结束值必须小于起始值",
+          "slice-overlap": "遮掩范围不能有重叠"
+        },
         "mask": "遮掩",
         "hash": "哈希",
         "full-mask": {
           "self": "全遮掩",
           "substitution": "遮掩字符串",
-          "substitution-label": "遮掩字符串是用来替换原始值的字符串，最大长度不能超过16字节。"
+          "substitution-label": "遮掩字符串是用来替换原始值的字符串，最大长度不能超过 16 个字符。"
         },
         "range-mask": {
           "self": "范围遮掩",
@@ -772,8 +782,8 @@
         },
         "md5-mask": {
           "self": "MD5 哈希",
-          "salt": "盐值",
-          "salt-label": "盐值用于计算生成哈希值。"
+          "salt": "盐值 (Salt)",
+          "salt-label": "盐值 (Salt) 用于通过原始值生成哈希值。"
         }
       },
       "masking-level": {
@@ -982,7 +992,8 @@
           "description": "按工单的审批状态搜索",
           "title": "审批状态"
         }
-      }
+      },
+      "hide": "隐藏高级搜索"
     },
     "table": {
       "open": "开启中",
@@ -1109,9 +1120,18 @@
     },
     "error": {
       "issue-is-not-open": "工单不是开启状态",
-      "you-don-have-privilege-to-edit-this-issue": "您没有权限编辑此工单"
+      "you-don-have-privilege-to-edit-this-issue": "您没有权限编辑此工单",
+      "you-are-not-allowed-to-perform-this-action": "您无权执行此操作"
     },
-    "approval-requested": "审批请求"
+    "approval-requested": "审批请求",
+    "assignee": {
+      "current-assignee": "当前指派人",
+      "workspace-admins": "Bytebase 工作空间管理员",
+      "workspace-dbas": "DBA",
+      "project-owners": "项目所有者",
+      "releasers-of-current-stage": "当前阶段的发布人",
+      "approvers-of-current-step": "当前步骤的审批人"
+    }
   },
   "alter-schema": {
     "vcs-enabled": "该项目开启了基于 VCS 的版本管理，选择下面的数据库会将您导航到相应的 Git 仓库以发起变更流程。",
@@ -1201,7 +1221,7 @@
     "successfully-synced-schema-for-instance-instance-value-name": "成功为实例'{0}'同步 schema 。",
     "archive-instance-instance-name": "归档实例'{0}'?",
     "archive-this-instance": "归档该实例",
-    "archived-instances-will-not-be-shown-on-the-normal-interface-you-can-still-restore-later-from-the-archive-page": "已归档实例不会在界面上显示。您之后仍可以在归档页中恢复他。",
+    "archived-instances-will-not-be-displayed": "不再会显示已归档实例。",
     "restore-this-instance": "恢复该实例",
     "restore": "恢复",
     "restore-instance-instance-name-to-normal-state": "恢复实例'{0}'到正常状态?",
@@ -1222,7 +1242,7 @@
     "show-how-to-create": "如何创建",
     "below-is-an-example-to-create-user-bytebase-with-password": "创建用户 'bytebase{'@'}%' 及其密码的例子如下",
     "your_db_pwd": "YOUR_DB_PWD",
-    "no-read-only-data-source-warn-for-owner-dba": "该实例没有配置只读连接，请考虑配置。",
+    "no-read-only-data-source-warn-for-admin-dba": "该实例没有配置只读连接，请考虑配置。",
     "no-read-only-data-source-warn-for-developer": "该实例没有配置只读连接，请让您的 DBA 配置一个。",
     "sentence": {
       "host": {
@@ -1313,7 +1333,7 @@
     "id-description": "环境 ID 是环境的唯一标识符。一旦创建不能修改。",
     "select": "选择环境",
     "archive": "归档此环境",
-    "archive-info": "已归档环境不会显示，您可以通过点击页面左下方的 \"归档\"来恢复。",
+    "archive-info": "已归档环境将不再显示。",
     "create": "创建环境",
     "restore": "恢复此环境",
     "successfully-updated-environment": "环境'{name}'更新成功",
@@ -1384,15 +1404,8 @@
       "name": "发布策略",
       "tip": "新策略对旧工单也生效",
       "info": "当要发布对数据库的变更时，该选项控制了是否需要人工发布。",
-      "manual": "人工发布",
-      "manual-info": "需要人工点击「发布」按钮后，才会执行变更。",
       "auto": "自动发布",
       "auto-info": "如果预检查都通过的话，会自动发布，执行变更。",
-      "assignee-group": {
-        "workspace-owner-or-dba": "需要 DBA 或者 Bytebase 实例所有者发布。",
-        "project-owner": "需要项目所有者发布。"
-      },
-      "manual-by-dba-or-workspace-owner": "需要 DBA 或者 Bytebase 实例所有者发布。",
       "manual-by-project-owner": "项目所有者",
       "manual-by-project-releaser": "项目的发布者",
       "manual-by-issue-creator": "工单的创建者",
@@ -1400,15 +1413,7 @@
       "manual-by-dedicated-roles": "特定角色手工发布",
       "manual-by-dedicated-roles-info": "允许以下任一选中角色，点击「发布」按钮后，执行变更。",
       "manual-by-dba": "DBA",
-      "manual-by-workspace-owner": "Bytebase 实例所有者",
-      "role": {
-        "workspace-owner": "Bytebase 实例所有者",
-        "dba": "DBA",
-        "project-owner": "项目所有者",
-        "project-releaser": "项目的发布者",
-        "issue-creator": "工单的创建者",
-        "last-approver": "自定义审批流的最后一个审批人"
-      }
+      "manual-by-workspace-admin": "Bytebase 工作空间管理员"
     },
     "backup": {
       "name": "数据库备份策略",
@@ -1633,7 +1638,7 @@
     "unassigned": "不再分配",
     "show-schemaless-databases": "显示无模式的数据库。（变更 Schema 不适用于无 schema 的数据库. ）",
     "secret": {
-      "new": "新增保密变量",
+      "new": "添加保密变量",
       "edit": "编辑保密变量",
       "name-placeholder": "输入保密变量名称",
       "description-placeholder": "输入描述",
@@ -1663,7 +1668,9 @@
     "classification": {
       "self": "分类分级"
     },
-    "recent": "最近访问"
+    "recent": "最近访问",
+    "partitioned": "分区",
+    "partition-tabled": "分区表"
   },
   "repository": {
     "branch-observe-file-change": "Bytebase 跟踪文件变更的分支。",
@@ -1713,7 +1720,7 @@
     "configure-deploy": "配置部署",
     "choose-git-provider-description": "选择存放着您数据库 schema 脚本的 Git 提供方。当您把变更脚本推送到 Git 仓库后，Bytebase 会自动创建一条流水线把 schema 变更应用到数据库上。",
     "choose-git-provider-visit-workspace": "访问 {workspace} 设置以添加更多 Git 提供方.",
-    "choose-git-provider-contact-workspace-owner": "如果您希望其他 Git 提供方出现在列表中，请联系 Bytebase 实例的所有者。当前 Bytebase 支持自己托管的 GitLab EE/CE，我们之后也会支持 GitLab.com 和 GitHub Enterprise",
+    "choose-git-provider-contact-workspace-admin": "如果您希望其他 Git 提供方出现在列表中，请联系 Bytebase 工作空间管理员。当前 Bytebase 支持自己托管的 GitLab EE/CE，我们之后也会支持 GitLab.com 和 GitHub Enterprise",
     "select-repository-attention-gitlab": "Bytebase 仅列出您至少拥有 'Maintainer' 权限的 GitLab 项目。因为只有至少拥有该权限，才能够配置项目的 webhook 用来监听代码推送事件。",
     "select-repository-attention-github": "Bytebase 仅列出您拥有管理员权限的 GitHub 仓库。因为只有拥有该权限，才能够配置仓库的 webhook 用来监听代码推送事件。",
     "select-repository-attention-bitbucket": "Bytebase 仅列出您拥有管理员权限的 Bitbucket 仓库。因为只有拥有该权限，才能够配置仓库的 webhook 用来监听代码推送事件。",
@@ -1825,7 +1832,7 @@
         },
         "issue-info-change": {
           "title": "工单信息变更",
-          "label": "当一个工单的信息 (比如: 分配人, 标题, 描述) 发生了变更"
+          "label": "当一个工单的信息 (比如: 指派人, 标题, 描述) 发生了变更"
         },
         "issue-comment-creation": {
           "title": "工单被评论",
@@ -1842,6 +1849,14 @@
         "issue-task-run-status-change": {
           "title": "工单任务执行状态变更",
           "label": "当一个工单包含的任务执行状态发生了变更"
+        },
+        "notify-issue-approved": {
+          "title": "工单审批通过",
+          "label": "当工单审批通过"
+        },
+        "notify-pipeline-rollout": {
+          "title": "工单待发布",
+          "label": "当工单待发布时"
         }
       }
     },
@@ -1852,10 +1867,10 @@
       "member-placeholder": "选择用户",
       "manage-member": "管理成员",
       "owner": "@.upper:common.role.owner",
-      "developer": "@.upper:common.role.developer",
+      "developer": "@.upper:common.role.member",
       "archive": {
         "title": "归档项目",
-        "description": "已归档的项目将不会显示在日常界面，您可以通过点击页面左下方的 \"归档\"来恢复。",
+        "description": "已归档项目将不再显示。",
         "btn-text": "归档这个@:common.project",
         "force": {
           "description": "强制归档。所有关联的工单都将被解决，所有关联的工作表都将被删除。"
@@ -1882,7 +1897,7 @@
       }
     },
     "members": {
-      "description": "项目成员角色决定了操作项目中的数据库和工单的权限。项目的所有者，工作空间的所有者和 DBA 都具有项目所有的权限。",
+      "description": "项目成员角色决定了操作项目中的数据库和工单的权限。项目的所有者，工作空间管理员和 DBA 都具有项目所有的权限。",
       "add-member": "添加成员",
       "revoke-member": "撤销成员",
       "revoke-access": "撤销访问",
@@ -1931,7 +1946,7 @@
   },
   "gitops": {
     "setting": {
-      "description": "Bytebase 支持 GitOps 工作流。该工作流下，数据库变更脚本存储在版本控制系统上 (VCS)，新创建的变更脚本会自动触发对应的数据库变更。Bytebase 的所有者先在此配置 VCS，在这之后，项目的所有者就可以从所配置的 VCS 中选取他们的 Git 仓库。",
+      "description": "Bytebase 支持 GitOps 工作流。该工作流下，数据库变更脚本存储在版本控制系统上 (VCS)，新创建的变更脚本会自动触发对应的数据库变更。Bytebase 管理员先在此配置 VCS，在这之后，项目的所有者就可以从所配置的 VCS 中选取他们的 Git 仓库。",
       "description-highlight": "如果您想通过您配置的VCS启用第三方登录，请在SSO中进行配置。",
       "add-git-provider": {
         "self": "添加 Git 提供方",
@@ -2013,13 +2028,6 @@
         "delete-confirm": "删除 Git 提供方 \"{name}\"？"
       }
     }
-  },
-  "archive": {
-    "archived": "已归档",
-    "project-search-bar-placeholder": "搜索@.lower:{'common.project'}的名称",
-    "instance-search-bar-placeholder": "搜索@.lower:{'common.instance'}的名称",
-    "environment-search-bar-placeholder": "搜索@.lower:{'common.environment'}的名称",
-    "sso-search-bar-placeholder": "搜索 SSO 的名称"
   },
   "deployment-config": {
     "stage-n": "阶段 {n}",
@@ -2216,7 +2224,9 @@
       "description": "批量查询 {project} 下的 {count} 个数据库。"
     },
     "executing-query": "执行查询",
-    "grouping": "分组"
+    "grouping": "分组",
+    "previous-row": "上一行",
+    "next-row": "下一行"
   },
   "schema-editor": {
     "self": "Schema 编辑器",
@@ -2291,7 +2301,8 @@
       "schema-not-found": "找不到 Schema",
       "failed-to-fetch-database-schema": "请求数据库 Schema 失败",
       "invalid-schema": "无效的 Schema",
-      "cannot-drop-the-last-column": "不能删除最后一列"
+      "cannot-drop-the-last-column": "不能删除最后一列",
+      "cannot-change-config": "数据库配置必须同 Schema 一起变更"
     },
     "confirm-to-close": {
       "title": "确定关闭？",
@@ -2360,11 +2371,11 @@
     "successfully-start-trial": "成功开启 {days} 天的免费试用",
     "successfully-upgrade-trial": "成功升级为{plan}试用",
     "require-subscription": "这个功能需要{requiredPlan}订阅，请购买 Bytebase 证书来解锁该功能。",
-    "required-plan-with-trial": "这个功能需要{requiredPlan}订阅，{startTrial}。",
-    "trial-for-plan": "您可以开启{plan}的 {days} 天免费试用 - 无需任何信用卡或预付费",
-    "trial-for-days": "您可以开启 {days} 天的免费试用 - 无需任何信用卡或预付费",
-    "upgrade-trial": "您可以直接将现有的试用升级到这个版本",
-    "contact-to-upgrade": "请联系 DBA 或所有者来升级到试用版",
+    "required-plan-with-trial": "这个功能需要{requiredPlan}订阅，{startTrial}",
+    "trial-for-plan": "您可以开启{plan}的 {days} 天免费试用 - 无需任何信用卡或预付费。",
+    "trial-for-days": "您可以开启 {days} 天的免费试用 - 无需任何信用卡或预付费。",
+    "upgrade-trial": "您可以直接将现有的试用升级到这个版本。",
+    "contact-to-upgrade": "请联系工作空间所有者来升级到试用版。",
     "upgrade-now": "现在升级",
     "instance-assignment": {
       "license": "证书",
@@ -2612,7 +2623,7 @@
     "policy-duplicated": "审核策略已复制",
     "rules": "规则",
     "filter": "筛选",
-    "no-permission": "仅 DBA 或所有者有权限创建或更新审核策略。",
+    "no-permission": "仅管理员或 DBA 有权限创建或更新审核策略。",
     "disable": "停用审核策略",
     "enable": "开启审核策略",
     "delete": "删除审核策略",
@@ -2662,6 +2673,8 @@
     "no-logs": "暂无 Debug 日志",
     "count-of-logs": "从服务端获取的最新 {count} 条日志。",
     "debug-log-detail": "日志详情",
+    "enabled": "Debug 模式已开启",
+    "open-debug-mode": "开启 Debug 模式",
     "table": {
       "record-ts": "时间",
       "method": "方法",
@@ -2871,7 +2884,6 @@
         "high": "高风险规则"
       },
       "active": "开启",
-      "add-rule": "添加规则",
       "edit-rule": "编辑规则",
       "delete": "删除安全规则",
       "default-rules": {
@@ -2951,7 +2963,7 @@
         "description": "当一个节点上有多个审批人时，只需要一次审批通过。",
         "approver": "审批人",
         "group": {
-          "WORKSPACE_OWNER": "工作空间所有者",
+          "WORKSPACE_OWNER": "工作空间管理员",
           "WORKSPACE_DBA": "DBA",
           "PROJECT_OWNER": "项目所有者",
           "PROJECT_MEMBER": "项目成员"
@@ -3057,14 +3069,13 @@
     },
     "no-log-placeholder": {
       "admin": "点击「配置」按钮从数据库实例上抓取慢查询日志或点击「立即同步」按钮立即同步慢查询日志",
-      "developer": "点击「立即同步」按钮立即同步慢查询日志或联系工作空间所有者或 DBA 配置慢查询功能"
+      "developer": "点击「立即同步」按钮立即同步慢查询日志或联系工作空间管理员或 DBA 配置慢查询功能"
     }
   },
   "schema-template": {
     "self": "Schema 模板",
     "field-template": {
       "self": "字段模板",
-      "add": "新增字段模板",
       "description": "预定义字段模板，之后可以在变更或设计 Schema 时应用这些模板。"
     },
     "column-type-restriction": {
@@ -3082,7 +3093,6 @@
     },
     "table-template": {
       "self": "表模板",
-      "add": "新增表模板",
       "description": "预定义表模板，之后可以在变更或设计 Schema 时应用这些模板。"
     },
     "search-by-name-or-comment": "根据名称或备注搜索",
@@ -3126,25 +3136,25 @@
     "select": "选择角色",
     "select-roles": "选择角色",
     "title": "称谓",
-    "owner": {
-      "description": "系统定义的项目所有者角色"
-    },
-    "developer": {
-      "description": "系统定义的项目开发者角色"
-    },
-    "exporter": {
-      "description": "系统定义的项目数据导出者角色"
-    },
-    "querier": {
-      "description": "系统定义的项目数据查询者角色"
-    },
     "select-role": "选择角色",
     "expired-tip": "该角色可能已经过期。",
+    "owner": {
+      "description": "项目内的所有权限。"
+    },
+    "developer": {
+      "description": "可查看项目基本信息，并可自助发起数据库变更、数据查询、数据导出请求。"
+    },
     "releaser": {
-      "description": "系统定义的项目发布者角色"
+      "description": "可查看项目基本信息，并可在指定流程中发布变更。"
+    },
+    "querier": {
+      "description": "可查询指定范围的数据。"
+    },
+    "exporter": {
+      "description": "可导出指定范围的数据。"
     },
     "viewer": {
-      "description": "系统定义的项目数据库查看者角色"
+      "description": "可查看项目基本信息，并可自助发起数据查询、数据导出请求。"
     }
   },
   "database-group": {

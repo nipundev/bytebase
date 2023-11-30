@@ -1,19 +1,31 @@
 <template>
-  {{ columnClassification?.title ?? placeholder }}
+  <NPerformantEllipsis v-if="showText" :line-clamp="1">
+    {{ columnClassification?.title ?? placeholder }}
+  </NPerformantEllipsis>
   <span v-if="level" :class="['px-1 py-0.5 rounded text-xs', levelColor]">
     {{ level.title }}
   </span>
 </template>
 
 <script lang="ts" setup>
+import { NPerformantEllipsis } from "naive-ui";
 import { computed } from "vue";
 import { DataClassificationSetting_DataClassificationConfig } from "@/types/proto/v1/setting_service";
 
-const props = defineProps<{
-  classification?: string;
-  classificationConfig?: DataClassificationSetting_DataClassificationConfig;
-  placeholder?: string;
-}>();
+const props = withDefaults(
+  defineProps<{
+    showText?: boolean;
+    classification?: string;
+    classificationConfig?: DataClassificationSetting_DataClassificationConfig;
+    placeholder?: string;
+  }>(),
+  {
+    showText: true,
+    classification: undefined,
+    classificationConfig: undefined,
+    placeholder: undefined,
+  }
+);
 
 const bgColorList = [
   "bg-green-200",

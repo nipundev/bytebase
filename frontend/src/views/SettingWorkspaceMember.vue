@@ -1,17 +1,18 @@
 <template>
-  <FeatureAttention
-    v-if="remainingUserCount <= 3"
-    custom-class="m-4"
-    feature="bb.feature.user-count"
-    :description="userCountAttention"
-  />
+  <div class="w-full overflow-x-hidden space-y-4">
+    <FeatureAttention
+      v-if="remainingUserCount <= 3"
+      feature="bb.feature.user-count"
+      :description="userCountAttention"
+    />
+    <FeatureAttention feature="bb.feature.rbac" />
 
-  <div class="w-full overflow-x-hidden pb-4">
-    <div v-if="allowAddOrInvite" class="w-full flex justify-center mb-6">
+    <div
+      v-if="allowAddOrInvite"
+      class="w-full flex justify-center mb-6 border-b pb-6"
+    >
       <MemberAddOrInvite />
     </div>
-
-    <FeatureAttention custom-class="my-4" feature="bb.feature.rbac" />
 
     <div class="flex justify-between items-center">
       <div class="flex-1 flex space-x-2">
@@ -85,7 +86,11 @@ import {
 } from "@/store";
 import { UserType } from "@/types/proto/v1/auth_service";
 import { State } from "@/types/proto/v1/common";
-import { SYSTEM_BOT_USER_NAME, filterUserListByKeyword } from "../types";
+import {
+  ALL_USERS_USER_NAME,
+  SYSTEM_BOT_USER_NAME,
+  filterUserListByKeyword,
+} from "../types";
 import { hasWorkspacePermissionV1 } from "../utils";
 
 type LocalState = {
@@ -136,7 +141,7 @@ const activeUserList = computed(() => {
 
 const inactiveUserList = computed(() => {
   const list = userStore.userList.filter(
-    (user) => user.state === State.DELETED
+    (user) => user.state === State.DELETED && user.email !== ALL_USERS_USER_NAME
   );
   return filterUserListByKeyword(list, state.inactiveUserFilterText);
 });

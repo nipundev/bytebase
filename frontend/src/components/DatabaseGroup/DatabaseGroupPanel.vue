@@ -1,11 +1,10 @@
 <template>
-  <NDrawer
+  <Drawer
     :show="true"
     width="auto"
-    :auto-focus="false"
     @update:show="(show: boolean) => !show && $emit('close')"
   >
-    <NDrawerContent
+    <DrawerContent
       :title="title"
       :closable="true"
       class="w-[64rem] max-w-[100vw] relative"
@@ -36,16 +35,17 @@
           </div>
         </div>
       </template>
-    </NDrawerContent>
-  </NDrawer>
+    </DrawerContent>
+  </Drawer>
 </template>
 
 <script lang="ts" setup>
-import { NButton, NDrawer, NDrawerContent, useDialog } from "naive-ui";
+import { NButton, useDialog } from "naive-ui";
 import { ClientError } from "nice-grpc-common";
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
+import { Drawer, DrawerContent } from "@/components/v2";
 import { buildCELExpr } from "@/plugins/cel/logic";
 import {
   pushNotification,
@@ -163,7 +163,8 @@ const doDelete = () => {
         const databaseGroup = props.databaseGroup as DatabaseGroup;
         await dbGroupStore.deleteDatabaseGroup(databaseGroup.name);
         if (
-          router.currentRoute.value.name === "workspace.database-group.detail"
+          router.currentRoute.value.name ===
+          "workspace.project.database-group.detail"
         ) {
           router.replace({
             name: "workspace.project.detail",
@@ -179,7 +180,7 @@ const doDelete = () => {
         await dbGroupStore.deleteSchemaGroup(schemaGroupName);
         if (
           router.currentRoute.value.name ===
-          "workspace.database-group.table-group.detail"
+          "workspace.project.database-group.table-group.detail"
         ) {
           const [_, databaseGroupName] =
             getProjectNameAndDatabaseGroupNameAndSchemaGroupName(
@@ -258,15 +259,16 @@ const doConfirm = async () => {
           return;
         }
 
-        if (!buildCELExpr(formState.expr)) {
-          return;
+        let tableExpression = "true";
+        if (buildCELExpr(formState.expr)) {
+          const celStrings = await batchConvertParsedExprToCELString([
+            ParsedExpr.fromJSON({
+              expr: buildCELExpr(formState.expr),
+            }),
+          ]);
+          tableExpression = celStrings[0] || "true";
         }
 
-        const celStrings = await batchConvertParsedExprToCELString([
-          ParsedExpr.fromJSON({
-            expr: buildCELExpr(formState.expr),
-          }),
-        ]);
         const resourceId = formState.resourceId;
         await dbGroupStore.createSchemaGroup({
           dbGroupName: formState.selectedDatabaseGroupId,
@@ -274,11 +276,21 @@ const doConfirm = async () => {
             name: `${formState.selectedDatabaseGroupId}/schemaGroups/${resourceId}`,
             tablePlaceholder: formState.placeholder,
             tableExpr: Expr.fromJSON({
-              expression: celStrings[0] || "true",
+              expression: tableExpression,
             }),
           },
           schemaGroupId: resourceId,
         });
+        const dbGroup = dbGroupStore.getDBGroupByName(
+          formState.selectedDatabaseGroupId
+        );
+        if (dbGroup) {
+          router.push(
+            `/project/${projectV1Slug(dbGroup.project)}/database-groups/${
+              dbGroup.databaseGroupName
+            }`
+          );
+        }
       } else {
         const celStrings = await batchConvertParsedExprToCELString([
           ParsedExpr.fromJSON({
@@ -294,6 +306,12 @@ const doConfirm = async () => {
         });
       }
     }
+    pushNotification({
+      module: "bytebase",
+      style: "SUCCESS",
+      title: isCreating.value ? t("common.created") : t("common.updated"),
+    });
+    emit("close");
   } catch (error) {
     console.error(error);
     pushNotification({
@@ -304,7 +322,5 @@ const doConfirm = async () => {
     });
     return;
   }
-
-  emit("close");
 };
 </script>

@@ -14,17 +14,14 @@ import DatabaseLayout from "@/layouts/DatabaseLayout.vue";
 import InstanceLayout from "@/layouts/InstanceLayout.vue";
 import SQLEditorLayout from "@/layouts/SQLEditorLayout.vue";
 import SplashLayout from "@/layouts/SplashLayout.vue";
-import { useConversationStore } from "@/plugins/ai/store";
 import { t } from "@/plugins/i18n";
 import {
   hasFeature,
   useVCSV1Store,
-  useDataSourceStore,
   useSQLReviewStore,
   useSheetV1Store,
   useAuthStore,
   useActuatorV1Store,
-  useLegacyInstanceStore,
   useRouterStore,
   useDBSchemaV1Store,
   useOnboardingStateStore,
@@ -243,36 +240,6 @@ const routes: Array<RouteRecordRaw> = [
             },
           },
           {
-            path: "/project/:projectSlug/changelists/:changelistName",
-            name: "workspace.changelist.detail",
-            meta: {
-              allowBookmark: true,
-              overrideTitle: true,
-            },
-            components: {
-              content: () =>
-                import("../components/Changelist/ChangelistDetail/"),
-              leftSidebar: ProjectSidebar,
-            },
-            props: {
-              content: true,
-              leftSidebar: true,
-            },
-          },
-          {
-            path: "/project/:projectSlug/branches/:branchName",
-            name: "workspace.branch.detail",
-            meta: {
-              allowBookmark: true,
-              overrideTitle: true,
-            },
-            components: {
-              content: () => import("../views/branch/BranchDetail.vue"),
-              leftSidebar: ProjectSidebar,
-            },
-            props: { content: true },
-          },
-          {
             path: "sync-schema",
             name: "workspace.sync-schema",
             meta: { title: () => startCase(t("database.sync-schema.title")) },
@@ -305,19 +272,6 @@ const routes: Array<RouteRecordRaw> = [
             components: {
               content: () => import("../views/AnomalyCenterDashboard.vue"),
               leftSidebar: DashboardSidebar,
-            },
-            props: {
-              content: true,
-              leftSidebar: true,
-            },
-          },
-          {
-            path: "archive",
-            name: "workspace.archive",
-            meta: { title: () => t("common.archived") },
-            components: {
-              content: () => import("../views/Archive.vue"),
-              leftSidebar: SettingSidebar,
             },
             props: {
               content: true,
@@ -602,6 +556,13 @@ const routes: Array<RouteRecordRaw> = [
                   import("../views/SettingWorkspaceDebugLog.vue"),
                 props: true,
               },
+              {
+                path: "archive",
+                name: "setting.workspace.archive",
+                meta: { title: () => t("common.archived") },
+                component: () => import("../views/Archive.vue"),
+                props: true,
+              },
             ],
           },
           {
@@ -649,7 +610,6 @@ const routes: Array<RouteRecordRaw> = [
                   String(idFromSlug(slug))
                 ).title;
               },
-              allowBookmark: true,
             },
             components: {
               content: () => import("../views/EnvironmentDetail.vue"),
@@ -682,20 +642,12 @@ const routes: Array<RouteRecordRaw> = [
               content: () => import("../layouts/ProjectLayout.vue"),
               leftSidebar: ProjectSidebar,
             },
-            props: { content: true },
+            props: { content: true, leftSidebar: true },
             children: [
               {
                 path: "",
                 name: "workspace.project.detail",
                 meta: {
-                  overrideBreadcrumb: (route: RouteLocationNormalized) => {
-                    const slug = route.params.projectSlug as string;
-                    const projectId = idFromSlug(slug);
-                    if (projectId === DEFAULT_PROJECT_ID) {
-                      return true;
-                    }
-                    return false;
-                  },
                   title: (route: RouteLocationNormalized) => {
                     const slug = route.params.projectSlug as string;
                     const projectId = idFromSlug(slug);
@@ -707,7 +659,6 @@ const routes: Array<RouteRecordRaw> = [
                     );
                     return projectV1.title;
                   },
-                  allowBookmark: true,
                 },
                 component: () => import("../views/ProjectDetail.vue"),
                 props: true,
@@ -742,9 +693,39 @@ const routes: Array<RouteRecordRaw> = [
                       webhook?.title ?? "unknown"
                     }`;
                   },
-                  allowBookmark: true,
                 },
                 component: () => import("../views/ProjectWebhookDetail.vue"),
+                props: true,
+              },
+              {
+                path: "branches/:branchName",
+                name: "workspace.project.branch.detail",
+                meta: {
+                  overrideTitle: true,
+                },
+                component: () => import("../views/branch/BranchDetail.vue"),
+                props: true,
+              },
+              {
+                path: "changelists/:changelistName",
+                name: "workspace.project.changelist.detail",
+                meta: {
+                  overrideTitle: true,
+                },
+                component: () =>
+                  import("../components/Changelist/ChangelistDetail/"),
+                props: true,
+              },
+              {
+                path: "database-groups/:databaseGroupName",
+                name: "workspace.project.database-group.detail",
+                component: () => import("../views/DatabaseGroupDetail.vue"),
+                props: true,
+              },
+              {
+                path: "database-groups/:databaseGroupName/table-groups/:schemaGroupName",
+                name: "workspace.project.database-group.table-group.detail",
+                component: () => import("../views/SchemaGroupDetail.vue"),
                 props: true,
               },
             ],
@@ -816,9 +797,9 @@ const routes: Array<RouteRecordRaw> = [
             path: "db/:databaseSlug",
             components: {
               content: DatabaseLayout,
-              leftSidebar: DashboardSidebar,
+              leftSidebar: ProjectSidebar,
             },
-            props: { content: true },
+            props: { content: true, leftSidebar: true },
             children: [
               {
                 path: "",
@@ -833,7 +814,6 @@ const routes: Array<RouteRecordRaw> = [
                       String(idFromSlug(slug))
                     ).databaseName;
                   },
-                  allowBookmark: true,
                 },
                 component: () => import("../views/DatabaseDetail.vue"),
                 props: true,
@@ -858,7 +838,7 @@ const routes: Array<RouteRecordRaw> = [
             },
             components: {
               content: () => import("../views/ChangeHistoryDetail.vue"),
-              leftSidebar: DashboardSidebar,
+              leftSidebar: ProjectSidebar,
             },
             props: { content: true, leftSidebar: true },
           },
@@ -893,38 +873,13 @@ const routes: Array<RouteRecordRaw> = [
             path: "issue/:issueSlug",
             name: "workspace.issue.detail",
             meta: {
-              allowBookmark: true,
               overrideTitle: true,
             },
             components: {
               content: () => import("../views/IssueDetailV1.vue"),
-              leftSidebar: DashboardSidebar,
+              leftSidebar: ProjectSidebar,
             },
-            props: { content: true },
-          },
-          // Resource name related routes.
-          {
-            path: "project/:projectSlug",
-            children: [
-              {
-                path: "database-groups/:databaseGroupName",
-                name: "workspace.database-group.detail",
-                components: {
-                  content: () => import("../views/DatabaseGroupDetail.vue"),
-                  leftSidebar: ProjectSidebar,
-                },
-                props: true,
-              },
-              {
-                path: "database-groups/:databaseGroupName/table-groups/:schemaGroupName",
-                name: "workspace.database-group.table-group.detail",
-                components: {
-                  content: () => import("../views/SchemaGroupDetail.vue"),
-                  leftSidebar: ProjectSidebar,
-                },
-                props: true,
-              },
-            ],
+            props: { content: true, leftSidebar: true },
           },
         ],
       },
@@ -986,7 +941,6 @@ router.beforeEach((to, from, next) => {
 
   const authStore = useAuthStore();
   const dbSchemaStore = useDBSchemaV1Store();
-  const instanceStore = useLegacyInstanceStore();
   const routerStore = useRouterStore();
   const projectV1Store = useProjectV1Store();
   const projectWebhookV1Store = useProjectWebhookV1Store();
@@ -1011,6 +965,10 @@ router.beforeEach((to, from, next) => {
     next();
     return;
   }
+  if (to.name === "workspace.debug-lsp") {
+    next();
+    return;
+  }
 
   if (
     to.name === SIGNIN_MODULE ||
@@ -1021,7 +979,9 @@ router.beforeEach((to, from, next) => {
     to.name === PASSWORD_FORGOT_MODULE
   ) {
     useTabStore().reset();
-    useConversationStore().reset();
+    import("@/plugins/ai/store").then(({ useConversationStore }) => {
+      useConversationStore().reset();
+    });
     if (isLoggedIn) {
       if (typeof to.query.redirect === "string") {
         location.replace(to.query.redirect);
@@ -1143,7 +1103,6 @@ router.beforeEach((to, from, next) => {
     to.name === "workspace.project" ||
     to.name === "workspace.instance" ||
     to.name === "workspace.database" ||
-    to.name === "workspace.archive" ||
     to.name === "workspace.issue" ||
     to.name === "workspace.environment" ||
     to.name === "sql-editor.home" ||
@@ -1194,7 +1153,6 @@ router.beforeEach((to, from, next) => {
   const issueSlug = routerSlug.issueSlug;
   const instanceSlug = routerSlug.instanceSlug;
   const databaseSlug = routerSlug.databaseSlug;
-  const dataSourceSlug = routerSlug.dataSourceSlug;
   const vcsSlug = routerSlug.vcsSlug;
   const connectionSlug = routerSlug.connectionSlug;
   const sheetSlug = routerSlug.sheetSlug;
@@ -1258,7 +1216,7 @@ router.beforeEach((to, from, next) => {
             });
             throw new Error("not found");
           }
-        } else if (to.name === "workspace.changelist.detail") {
+        } else if (to.name === "workspace.project.changelist.detail") {
           const name = `${project.name}/changelists/${to.params.changelistName}`;
           useChangelistStore()
             .fetchChangelistByName(name)
@@ -1281,7 +1239,7 @@ router.beforeEach((to, from, next) => {
               throw error;
             });
         } else if (
-          to.name === "workspace.branch.detail" &&
+          to.name === "workspace.project.branch.detail" &&
           to.params.branchName !== "new"
         ) {
           const name = `${project.name}/schemaDesigns/${to.params.branchName}`;
@@ -1326,7 +1284,7 @@ router.beforeEach((to, from, next) => {
     return;
   }
 
-  if (to.name === "workspace.branch.detail") {
+  if (to.name === "workspace.project.branch.detail") {
     if (to.params.branchName === "new") {
       next();
       return;
@@ -1348,25 +1306,7 @@ router.beforeEach((to, from, next) => {
             view: DatabaseMetadataView.DATABASE_METADATA_VIEW_BASIC,
           })
           .then(() => {
-            if (!dataSourceSlug) {
-              next();
-            } else if (dataSourceSlug) {
-              useDataSourceStore()
-                .fetchDataSourceById({
-                  dataSourceId: idFromSlug(dataSourceSlug),
-                  databaseId: Number(database.uid),
-                })
-                .then(() => {
-                  next();
-                })
-                .catch((error) => {
-                  next({
-                    name: "error.404",
-                    replace: false,
-                  });
-                  throw error;
-                });
-            }
+            next();
           });
       })
       .catch((error) => {
@@ -1380,7 +1320,6 @@ router.beforeEach((to, from, next) => {
   }
 
   if (instanceSlug) {
-    instanceStore;
     useInstanceV1Store()
       .getOrFetchInstanceByUID(String(idFromSlug(instanceSlug)))
       .then(() => {

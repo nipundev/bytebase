@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-3 w-full overflow-x-auto px-4 pt-1" v-bind="$attrs">
+  <div class="space-y-3 w-full overflow-x-auto" v-bind="$attrs">
     <div class="w-full flex flex-row justify-between items-center">
       <div class="w-full flex flex-row justify-start items-center gap-x-2">
         <NInput
@@ -462,7 +462,7 @@ const handleSaveBranch = async () => {
               );
               state.isEditing = false;
               router.replace({
-                name: "workspace.branch.detail",
+                name: "workspace.project.branch.detail",
                 params: {
                   projectSlug: projectV1Slug(project.value),
                   branchName: sheetId,
@@ -525,7 +525,7 @@ const handleMergeAfterConflictResolved = (branchName: string) => {
   state.isEditing = false;
   const [_, sheetId] = getProjectAndSchemaDesignSheetId(branchName);
   router.replace({
-    name: "workspace.branch.detail",
+    name: "workspace.project.branch.detail",
     params: {
       projectSlug: projectV1Slug(project.value),
       branchName: sheetId,
@@ -554,6 +554,21 @@ const handleSelectedDatabaseIdListChanged = async (
       module: "bytebase",
       style: "WARN",
       title: t("schema-editor.message.invalid-schema"),
+    });
+    return;
+  }
+
+  if (
+    statement === "" &&
+    !isEqual(
+      schemaDesign.value.baselineSchemaMetadata?.schemaConfigs,
+      schemaDesign.value.schemaMetadata?.schemaConfigs
+    )
+  ) {
+    pushNotification({
+      module: "bytebase",
+      style: "WARN",
+      title: t("schema-editor.message.cannot-change-config"),
     });
     return;
   }

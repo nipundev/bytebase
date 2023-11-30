@@ -1,8 +1,14 @@
 import { TreeOption } from "naive-ui";
+import { RenderFunction } from "vue";
 import { t } from "@/plugins/i18n";
-import { getCustomProjectTitle } from "@/utils/customTheme";
+import { useSQLEditorTreeStore } from "@/store";
 import { Engine } from "./proto/v1/common";
-import { SchemaMetadata, TableMetadata } from "./proto/v1/database_service";
+import {
+  SchemaMetadata,
+  TableMetadata,
+  TablePartitionMetadata,
+  ViewMetadata,
+} from "./proto/v1/database_service";
 import { Environment } from "./proto/v1/environment_service";
 import { ComposedDatabase, ComposedInstance, ComposedProject } from "./v1";
 
@@ -25,7 +31,10 @@ export type SQLEditorTreeNodeType =
   | "schema"
   | "table"
   | "label"
-  | "dummy"; // Dummy nodes to display "no tables" etc.
+  | "view"
+  | "partition-table"
+  | "expandable-text" // Text nodes to display "Tables / Views / Functions / Triggers" etc.
+  | "dummy"; // Dummy nodes to display "<Empty>" etc.
 
 export type RichSchemaMetadata = {
   database: ComposedDatabase;
@@ -35,6 +44,25 @@ export type RichTableMetadata = {
   database: ComposedDatabase;
   schema: SchemaMetadata;
   table: TableMetadata;
+};
+export type RichPartitionTableMetadata = {
+  database: ComposedDatabase;
+  schema: SchemaMetadata;
+  table: TableMetadata;
+  parentPartition?: TablePartitionMetadata;
+  partition: TablePartitionMetadata;
+};
+export type RichViewMetadata = {
+  database: ComposedDatabase;
+  schema: SchemaMetadata;
+  view: ViewMetadata;
+};
+export type TextTarget<E extends boolean> = {
+  expandable: E;
+  type: SQLEditorTreeNodeType;
+  text: string | (() => string);
+  render?: RenderFunction;
+  searchable?: boolean;
 };
 
 export type SQLEditorTreeNodeTarget<T extends SQLEditorTreeNodeType = any> =
@@ -50,8 +78,14 @@ export type SQLEditorTreeNodeTarget<T extends SQLEditorTreeNodeType = any> =
     ? RichSchemaMetadata
     : T extends "table"
     ? RichTableMetadata
+    : T extends "partition-table"
+    ? RichPartitionTableMetadata
+    : T extends "view"
+    ? RichViewMetadata
     : T extends "label"
     ? { key: string; value: string }
+    : T extends "expandable-text"
+    ? TextTarget<true>
     : T extends "dummy"
     ? { type: SQLEditorTreeNodeType; error?: unknown }
     : never;
@@ -85,6 +119,9 @@ export const ExpandableTreeNodeTypes: readonly SQLEditorTreeNodeType[] = [
   "instance",
   "environment",
   "project",
+  "table",
+  "partition-table",
+  "expandable-text",
   "label",
 ] as const;
 
@@ -94,7 +131,7 @@ export const ConnectableTreeNodeTypes: readonly SQLEditorTreeNodeType[] = [
 ] as const;
 
 export const LeafTreeNodeTypes: readonly SQLEditorTreeNodeType[] = [
-  "table",
+  "view",
   "dummy",
 ] as const;
 
@@ -108,8 +145,13 @@ export const readableSQLEditorTreeFactor = (
   factor: SQLEditorTreeFactor,
   labelPrefix: string | undefined = ""
 ) => {
+  const treeStore = useSQLEditorTreeStore();
   if (factor === "project") {
-    return getCustomProjectTitle();
+    if (treeStore.projectMode) {
+      return t("common.database");
+    } else {
+      return t("common.project");
+    }
   }
   if (factor === "environment") {
     return t("common.environment");

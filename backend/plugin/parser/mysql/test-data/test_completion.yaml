@@ -1,3 +1,83 @@
+- input: SELECT c1 as eid, c2 as xid FROM t2 ORDER BY |
+  want:
+    - text: db
+      type: DATABASE
+    - text: t1
+      type: TABLE
+    - text: t2
+      type: TABLE
+    - text: c1
+      type: COLUMN
+    - text: c2
+      type: COLUMN
+    - text: eid
+      type: COLUMN
+    - text: xid
+      type: COLUMN
+    - text: v1
+      type: VIEW
+- input: SELECT c1 as eid FROM t1 ORDER BY |
+  want:
+    - text: db
+      type: DATABASE
+    - text: t1
+      type: TABLE
+    - text: t2
+      type: TABLE
+    - text: c1
+      type: COLUMN
+    - text: eid
+      type: COLUMN
+    - text: v1
+      type: VIEW
+- input: SELECT FROM basdkfjasldf;SELECT | FROM t1
+  want:
+    - text: db
+      type: DATABASE
+    - text: t1
+      type: TABLE
+    - text: t2
+      type: TABLE
+    - text: c1
+      type: COLUMN
+    - text: v1
+      type: VIEW
+- input: SELECT | FROM (SELECT c1 FROM t1) cc1(cc1c1)
+  want:
+    - text: db
+      type: DATABASE
+    - text: cc1
+      type: TABLE
+    - text: t1
+      type: TABLE
+    - text: t2
+      type: TABLE
+    - text: cc1c1
+      type: COLUMN
+    - text: v1
+      type: VIEW
+- input: SELECT | FROM (SELECT c1 FROM t1) cc1
+  want:
+    - text: db
+      type: DATABASE
+    - text: cc1
+      type: TABLE
+    - text: t1
+      type: TABLE
+    - text: t2
+      type: TABLE
+    - text: v1
+      type: VIEW
+- input: SELECT * from t1 cc1 JOIN t2 on cc1.|
+  want:
+    - text: c1
+      type: COLUMN
+- input: SELECT MAX(cc1.|) FROM t2 cc1
+  want:
+    - text: c1
+      type: COLUMN
+    - text: c2
+      type: COLUMN
 - input: SELECT * FROM |
   want:
     - text: db
@@ -10,8 +90,6 @@
       type: VIEW
 - input: SELECT | FROM t1
   want:
-    - text: runtimeFunction()
-      type: FUNCTION
     - text: db
       type: DATABASE
     - text: t1
@@ -24,8 +102,6 @@
       type: VIEW
 - input: SELECT | FROM t2 x
   want:
-    - text: runtimeFunction()
-      type: FUNCTION
     - text: db
       type: DATABASE
     - text: t1

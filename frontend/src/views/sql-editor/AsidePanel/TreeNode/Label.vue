@@ -17,6 +17,15 @@
   <template v-if="type === 'table'">
     <TableNode :node="node" :factors="factors" :keyword="keyword" />
   </template>
+  <template v-if="type === 'partition-table'">
+    <PartitionTableNode :node="node" :factors="factors" :keyword="keyword" />
+  </template>
+  <template v-if="type === 'view'">
+    <ViewNode :node="node" :factors="factors" :keyword="keyword" />
+  </template>
+  <template v-if="type === 'expandable-text'">
+    <TextNode :node="node" :factors="factors" :keyword="keyword" />
+  </template>
   <template v-if="type === 'label'">
     <LabelNode :node="node" :factors="factors" :keyword="keyword" />
   </template>
@@ -36,9 +45,12 @@ import DummyNode from "./DummyNode.vue";
 import EnvironmentNode from "./EnvironmentNode.vue";
 import InstanceNode from "./InstanceNode.vue";
 import LabelNode from "./LabelNode.vue";
+import PartitionTableNode from "./PartitionTableNode.vue";
 import ProjectNode from "./ProjectNode.vue";
 import SchemaNode from "./SchemaNode.vue";
 import TableNode from "./TableNode.vue";
+import TextNode from "./TextNode.vue";
+import ViewNode from "./ViewNode.vue";
 
 const props = defineProps<{
   node: TreeNode;

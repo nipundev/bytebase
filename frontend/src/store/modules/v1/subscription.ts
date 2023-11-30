@@ -71,7 +71,7 @@ export const useSubscriptionV1Store = defineStore("subscription_v1", {
         return "";
       }
 
-      return dayjs(state.subscription.expiresTime).format("YYYY-MM-DD");
+      return dayjs(state.subscription.expiresTime).format("L");
     },
     isTrialing(state): boolean {
       return !!state.subscription?.trialing;
@@ -119,6 +119,9 @@ export const useSubscriptionV1Store = defineStore("subscription_v1", {
       return !!settingStore.getSettingByName("bb.enterprise.trial");
     },
     canTrial(state): boolean {
+      if (!this.isSelfHostLicense) {
+        return false;
+      }
       if (this.existTrialLicense) {
         return false;
       }
@@ -128,7 +131,13 @@ export const useSubscriptionV1Store = defineStore("subscription_v1", {
       return this.canUpgradeTrial;
     },
     canUpgradeTrial(state): boolean {
-      return this.currentPlan < PlanType.ENTERPRISE;
+      return this.isSelfHostLicense && this.currentPlan < PlanType.ENTERPRISE;
+    },
+    isSelfHostLicense(state): boolean {
+      return import.meta.env.MODE.toLowerCase() !== "aws";
+    },
+    purchaseLicenseUrl(state): string {
+      return import.meta.env.BB_PURCHASE_LICENSE_URL;
     },
   },
   actions: {

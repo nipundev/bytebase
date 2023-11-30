@@ -158,10 +158,6 @@ type MigrationInfo struct {
 	Creator        string
 	// Payload contains JSON-encoded string of VCS push event if the migration is triggered by a VCS push event.
 	Payload *storepb.InstanceChangeHistoryPayload
-	// Force is used to execute migration disregarding any migration history with PENDING or FAILED status.
-	// This applies to BASELINE and MIGRATE types of migrations because most of these migrations are retry-able.
-	// We don't use force option for DATA type of migrations yet till there's customer needs.
-	Force bool
 }
 
 // placeholderRegexp is the regexp for placeholder.
@@ -354,6 +350,7 @@ type SSHConfig struct {
 type ConnectionContext struct {
 	EnvironmentID string
 	InstanceID    string
+	EngineVersion string
 }
 
 // QueryContext is the context to query.
@@ -369,8 +366,6 @@ type QueryContext struct {
 	CurrentDatabase string
 	// ShareDB is for Redshift.
 	ShareDB bool
-	// EngineVersion is only for oracle.
-	EngineVersion string
 }
 
 // DatabaseRoleMessage is the API message for database role.
@@ -413,7 +408,6 @@ type Driver interface {
 	// Execute will execute the statement.
 	Execute(ctx context.Context, statement string, createDatabase bool, opts ExecuteOptions) (int64, error)
 	// Used for execute readonly SELECT statement
-	// TODO(rebelice): remove QueryConn and rename QueryConn2 to QueryConn when legacy code is removed.
 	QueryConn(ctx context.Context, conn *sql.Conn, statement string, queryContext *QueryContext) ([]*v1pb.QueryResult, error)
 	// RunStatement will execute the statement and return the result, for both SELECT and non-SELECT statements.
 	RunStatement(ctx context.Context, conn *sql.Conn, statement string) ([]*v1pb.QueryResult, error)
@@ -488,4 +482,20 @@ func Open(ctx context.Context, dbType storepb.Engine, driverConfig DriverConfig,
 type ExecuteOptions struct {
 	BeginFunc          func(ctx context.Context, conn *sql.Conn) error
 	EndTransactionFunc func(tx *sql.Tx) error
+	// ChunkedSubmission is the flag to indicate if we should use chunked submission for the statement.
+	// If true, we will submit each statement chunk, otherwise we will submit all statements in a batch.
+	// For both cases, we will use one transaction to wrap the statements.
+	ChunkedSubmission     bool
+	UpdateExecutionStatus func(*v1pb.TaskRun_ExecutionDetail)
+}
+
+// ErrorWithPosition is the error with the position information.
+type ErrorWithPosition struct {
+	Err   error
+	Start *storepb.TaskRunResult_Position
+	End   *storepb.TaskRunResult_Position
+}
+
+func (e *ErrorWithPosition) Error() string {
+	return e.Err.Error()
 }

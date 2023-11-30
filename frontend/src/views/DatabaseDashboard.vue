@@ -1,33 +1,39 @@
 <template>
-  <div class="flex flex-col relative">
-    <div class="px-4 py-2 flex justify-between items-center">
+  <div class="flex flex-col relative space-y-4">
+    <div
+      class="px-4 flex flex-col lg:flex-row justify-between items-start lg:items-end"
+    >
       <EnvironmentTabFilter
         :include-all="true"
         :environment="selectedEnvironment?.name"
         @update:environment="changeEnvironment"
       />
 
-      <div class="flex items-center space-x-4">
-        <NTooltip v-if="canVisitUnassignedDatabases && !isStandaloneMode">
-          <template #trigger>
-            <router-link
-              :to="{
-                name: 'workspace.project.detail',
-                params: {
-                  projectSlug: DEFAULT_PROJECT_ID,
-                },
-                hash: '#databases',
-              }"
-              class="normal-link text-sm"
-            >
-              {{ $t("database.view-unassigned-databases") }}
-            </router-link>
-          </template>
+      <div
+        class="mt-2 lg:mt-0 flex flex-col sm:flex-row items-start sm:items-center"
+      >
+        <div class="mb-2 sm:mr-4 sm:mb-0">
+          <NTooltip v-if="canVisitUnassignedDatabases && !isStandaloneMode">
+            <template #trigger>
+              <router-link
+                :to="{
+                  name: 'workspace.project.detail',
+                  params: {
+                    projectSlug: DEFAULT_PROJECT_ID,
+                  },
+                  hash: '#databases',
+                }"
+                class="normal-link text-sm"
+              >
+                {{ $t("database.view-unassigned-databases") }}
+              </router-link>
+            </template>
 
-          <div class="whitespace-pre-wrap">
-            {{ $t("quick-action.unassigned-db-hint") }}
-          </div>
-        </NTooltip>
+            <div class="whitespace-pre-wrap">
+              {{ $t("quick-action.unassigned-db-hint") }}
+            </div>
+          </NTooltip>
+        </div>
 
         <NInputGroup style="width: auto">
           <InstanceSelect
@@ -40,10 +46,9 @@
             "
           />
           <SearchBox
-            :value="state.searchText"
+            v-model:value="state.searchText"
             :placeholder="$t('database.filter-database')"
             :autofocus="true"
-            @update:value="changeSearchText($event)"
           />
         </NInputGroup>
       </div>
@@ -58,6 +63,7 @@
 
     <DatabaseV1Table
       pagination-class="mb-4"
+      table-class="border-y"
       :database-list="filteredDatabaseList"
       :database-group-list="filteredDatabaseGroupList"
       :show-placeholder="true"
@@ -147,6 +153,7 @@ import {
   UNKNOWN_USER_NAME,
   ComposedDatabase,
   ComposedDatabaseGroup,
+  DEFAULT_PROJECT_V1_NAME,
 } from "../types";
 
 interface LocalState {
@@ -188,9 +195,7 @@ const preparePolicyList = () => {
 
 watchEffect(preparePolicyList);
 
-const isStandaloneMode = computed(() => {
-  return pageMode.value === "STANDALONE";
-});
+const isStandaloneMode = computed(() => pageMode.value === "STANDALONE");
 
 const selectedEnvironment = computed(() => {
   const { environment } = route.query;
@@ -219,7 +224,7 @@ const prepareDatabaseList = async () => {
   // It will also be called when user logout
   if (currentUserV1.value.name !== UNKNOWN_USER_NAME) {
     state.loading = true;
-    await databaseV1Store.searchDatabaseList({
+    await databaseV1Store.fetchDatabaseList({
       parent: "instances/-",
     });
     state.loading = false;
@@ -262,10 +267,6 @@ const changeEnvironment = (environment: string | undefined) => {
   }
 };
 
-const changeSearchText = (searchText: string) => {
-  state.searchText = searchText;
-};
-
 const filteredDatabaseList = computed(() => {
   let list = databaseV1List.value.filter((database) =>
     isDatabaseV1Accessible(database, currentUserV1.value)
@@ -277,6 +278,11 @@ const filteredDatabaseList = computed(() => {
   if (state.instanceFilter !== String(UNKNOWN_ID)) {
     list = list.filter(
       (db) => db.instanceEntity.uid === String(state.instanceFilter)
+    );
+  }
+  if (isStandaloneMode.value) {
+    list = list.filter(
+      (db) => db.projectEntity.name !== DEFAULT_PROJECT_V1_NAME
     );
   }
   const keyword = state.searchText.trim().toLowerCase();

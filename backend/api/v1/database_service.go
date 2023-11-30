@@ -13,9 +13,9 @@ import (
 	"time"
 	"unicode"
 
-	tidbparser "github.com/pingcap/tidb/parser"
-	tidbast "github.com/pingcap/tidb/parser/ast"
-	"github.com/pingcap/tidb/parser/format"
+	tidbparser "github.com/pingcap/tidb/pkg/parser"
+	tidbast "github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/format"
 	"github.com/pkg/errors"
 	openai "github.com/sashabaranov/go-openai"
 	"google.golang.org/grpc/codes"
@@ -29,6 +29,7 @@ import (
 	"github.com/bytebase/bytebase/backend/common"
 	"github.com/bytebase/bytebase/backend/common/log"
 	"github.com/bytebase/bytebase/backend/component/config"
+	"github.com/bytebase/bytebase/backend/component/iam"
 	enterprise "github.com/bytebase/bytebase/backend/enterprise/api"
 	api "github.com/bytebase/bytebase/backend/legacyapi"
 	"github.com/bytebase/bytebase/backend/plugin/db"
@@ -69,16 +70,18 @@ type DatabaseService struct {
 	schemaSyncer   *schemasync.Syncer
 	licenseService enterprise.LicenseService
 	profile        *config.Profile
+	iamManager     *iam.Manager
 }
 
 // NewDatabaseService creates a new DatabaseService.
-func NewDatabaseService(store *store.Store, br *backuprun.Runner, schemaSyncer *schemasync.Syncer, licenseService enterprise.LicenseService, profile *config.Profile) *DatabaseService {
+func NewDatabaseService(store *store.Store, br *backuprun.Runner, schemaSyncer *schemasync.Syncer, licenseService enterprise.LicenseService, profile *config.Profile, iamManager *iam.Manager) *DatabaseService {
 	return &DatabaseService{
 		store:          store,
 		backupRunner:   br,
 		schemaSyncer:   schemaSyncer,
 		licenseService: licenseService,
 		profile:        profile,
+		iamManager:     iamManager,
 	}
 }
 
@@ -121,6 +124,10 @@ func (s *DatabaseService) GetDatabase(ctx context.Context, request *v1pb.GetData
 
 // ListDatabases lists all databases.
 func (s *DatabaseService) ListDatabases(ctx context.Context, request *v1pb.ListDatabasesRequest) (*v1pb.ListDatabasesResponse, error) {
+	user, ok := ctx.Value(common.UserContextKey).(*store.UserMessage)
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "failed to retrieve user from context")
+	}
 	instanceID, err := common.GetInstanceID(request.Parent)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, err.Error())
@@ -153,46 +160,32 @@ func (s *DatabaseService) ListDatabases(ctx context.Context, request *v1pb.ListD
 			}
 			return nil, err
 		}
+		if s.profile.DevelopmentIAM {
+			ok, err := s.iamManager.CheckPermission(ctx, iam.PermissionDatabasesList, user, database.ProjectID)
+			if err != nil {
+				return nil, status.Errorf(codes.Internal, "failed to check permission, error: %v", err)
+			}
+			if !ok {
+				continue
+			}
+		}
 		response.Databases = append(response.Databases, convertToDatabase(database))
 	}
 	return response, nil
 }
 
 // SearchDatabases searches all databases.
+// Deprecated.
 func (s *DatabaseService) SearchDatabases(ctx context.Context, request *v1pb.SearchDatabasesRequest) (*v1pb.SearchDatabasesResponse, error) {
-	instanceID, err := common.GetInstanceID(request.Parent)
+	// TODO(d): to be deprecated.
+	r := &v1pb.ListDatabasesRequest{Parent: request.Parent, Filter: request.Filter, PageToken: request.PageToken, PageSize: request.PageSize}
+	resp, err := s.ListDatabases(ctx, r)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		return nil, err
 	}
-	find := &store.FindDatabaseMessage{}
-	if instanceID != "-" {
-		find.InstanceID = &instanceID
-	}
-	if request.Filter != "" {
-		projectFilter, err := getProjectFilter(request.Filter)
-		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, err.Error())
-		}
-		projectID, err := common.GetProjectID(projectFilter)
-		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, "invalid project %q in the filter", projectFilter)
-		}
-		find.ProjectID = &projectID
-	}
-	databases, err := s.store.ListDatabases(ctx, find)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, err.Error())
-	}
-	response := &v1pb.SearchDatabasesResponse{}
-	for _, database := range databases {
-		if err := s.checkDatabasePermission(ctx, database.ProjectID, api.ProjectPermissionManageGeneral); err != nil {
-			st := status.Convert(err)
-			if st.Code() == codes.PermissionDenied {
-				continue
-			}
-			return nil, err
-		}
-		response.Databases = append(response.Databases, convertToDatabase(database))
+	response := &v1pb.SearchDatabasesResponse{
+		Databases:     resp.Databases,
+		NextPageToken: resp.NextPageToken,
 	}
 	return response, nil
 }
@@ -912,7 +905,8 @@ func (s *DatabaseService) ListChangeHistories(ctx context.Context, request *v1pb
 	limitPlusOne := limit + 1
 
 	truncateSize := 512
-	if s.profile.Mode == common.ReleaseModeDev {
+	// We apply small truncate size in dev environment (not demo) for finding incorrect usage of views
+	if s.profile.Mode == common.ReleaseModeDev && s.profile.DemoName == "" {
 		truncateSize = 4
 	}
 	find := &store.FindInstanceChangeHistoryMessage{
@@ -990,7 +984,8 @@ func (s *DatabaseService) GetChangeHistory(ctx context.Context, request *v1pb.Ge
 	}
 
 	truncateSize := 4 * 1024 * 1024
-	if s.profile.Mode == common.ReleaseModeDev {
+	// We apply small truncate size in dev environment (not demo) for finding incorrect usage of views
+	if s.profile.Mode == common.ReleaseModeDev && s.profile.DemoName == "" {
 		truncateSize = 64
 	}
 	find := &store.FindInstanceChangeHistoryMessage{
@@ -1713,14 +1708,11 @@ func (s *DatabaseService) ListSlowQueries(ctx context.Context, request *v1pb.Lis
 
 	var canAccessDBs []*store.DatabaseMessage
 
-	principalID, ok := ctx.Value(common.PrincipalIDContextKey).(int)
+	user, ok := ctx.Value(common.UserContextKey).(*store.UserMessage)
 	if !ok {
-		return nil, status.Errorf(codes.Internal, "principal ID not found")
+		return nil, status.Errorf(codes.Internal, "user not found")
 	}
-	user, err := s.store.GetUserByID(ctx, principalID)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to find user %q", err.Error())
-	}
+
 	switch user.Role {
 	case api.Owner, api.DBA:
 		canAccessDBs = databases
@@ -1730,8 +1722,18 @@ func (s *DatabaseService) ListSlowQueries(ctx context.Context, request *v1pb.Lis
 			if err != nil {
 				return nil, status.Errorf(codes.Internal, "failed to find project policy %q", err.Error())
 			}
-			if isProjectOwnerOrDeveloper(principalID, policy) {
+			if isProjectOwnerOrDeveloper(user.ID, policy) {
 				canAccessDBs = append(canAccessDBs, database)
+			}
+
+			if s.profile.DevelopmentIAM {
+				ok, err := s.iamManager.CheckPermission(ctx, iam.PermissionSlowQueriesList, user, database.ProjectID)
+				if err != nil {
+					return nil, status.Errorf(codes.Internal, "failed to check permission, err: %v", err.Error())
+				}
+				if ok {
+					canAccessDBs = append(canAccessDBs, database)
+				}
 			}
 		}
 	default:
@@ -1961,7 +1963,7 @@ func convertToDatabase(database *store.DatabaseMessage) *v1pb.Database {
 		effectiveEnvironment = fmt.Sprintf("%s%s", common.EnvironmentNamePrefix, database.EffectiveEnvironmentID)
 	}
 	return &v1pb.Database{
-		Name:                 fmt.Sprintf("instances/%s/databases/%s", database.InstanceID, database.DatabaseName),
+		Name:                 common.FormatDatabase(database.InstanceID, database.DatabaseName),
 		Uid:                  fmt.Sprintf("%d", database.UID),
 		SyncState:            syncState,
 		SuccessfulSyncTime:   timestamppb.New(time.Unix(database.SuccessfulSyncTimeTs, 0)),
@@ -2371,7 +2373,7 @@ func isProjectOwnerOrDeveloper(principalID int, projectPolicy *store.IAMPolicyMe
 			continue
 		}
 		for _, member := range binding.Members {
-			if member.ID == principalID {
+			if member.ID == principalID || member.Email == api.AllUsers {
 				return true
 			}
 		}
@@ -2785,10 +2787,14 @@ func convertTableMetadata(table *storepb.TableMetadata, view v1pb.DatabaseMetada
 		Classification: table.Classification,
 		UserComment:    table.UserComment,
 	}
+	for _, partition := range table.Partitions {
+		t.Partitions = append(t.Partitions, convertTablePartitionMetadata(partition))
+	}
 	// We only return the table info for basic view.
 	if view != v1pb.DatabaseMetadataView_DATABASE_METADATA_VIEW_FULL {
 		return t
 	}
+
 	for _, column := range table.Columns {
 		t.Columns = append(t.Columns, convertColumnMetadata(column))
 	}
@@ -2814,9 +2820,6 @@ func convertTableMetadata(table *storepb.TableMetadata, view v1pb.DatabaseMetada
 			OnUpdate:          foreignKey.OnUpdate,
 			MatchType:         foreignKey.MatchType,
 		})
-	}
-	for _, partition := range table.Partitions {
-		t.Partitions = append(t.Partitions, convertTablePartitionMetadata(partition))
 	}
 	return t
 }

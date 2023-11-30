@@ -117,22 +117,84 @@
       </template>
     </BBAttention>
 
-    <div class="whitespace-pre-wrap overflow-hidden border">
+    <div
+      ref="editorContainerElRef"
+      class="whitespace-pre-wrap overflow-hidden min-h-[120px] relative"
+      :data-height="editorContainerHeight"
+    >
       <MonacoEditor
-        ref="editorRef"
-        class="w-full h-auto max-h-[360px] min-h-[120px]"
-        data-label="bb-issue-sql-editor"
-        :value="state.statement"
-        :readonly="isEditorReadonly"
-        :auto-focus="false"
+        class="w-full h-auto max-h-[240px] min-h-[120px] border rounded-[3px]"
+        :filename="filename"
+        :content="state.statement"
         :language="language"
+        :auto-focus="false"
+        :readonly="isEditorReadonly"
         :dialect="dialect"
         :advices="isEditorReadonly ? markers : []"
-        @change="handleStatementChange"
-        @ready="handleMonacoEditorReady"
+        :auto-height="{ min: 120, max: 240 }"
+        :auto-complete-context="{
+          instance: database.instance,
+          database: database.name,
+        }"
+        @update:content="handleStatementChange"
       />
+      <div
+        class="absolute bottom-[3px] right-[18px] transition-opacity"
+        :class="
+          editorContainerHeight >= 240
+            ? 'opacity-100'
+            : 'opacity-0 pointer-events-none'
+        "
+      >
+        <NButton
+          size="small"
+          :quaternary="true"
+          style="--n-padding: 0 5px"
+          @click="state.showEditorModal = true"
+        >
+          <template #icon>
+            <ExpandIcon class="w-4 h-4" />
+          </template>
+        </NButton>
+      </div>
     </div>
   </div>
+
+  <BBModal
+    v-model:show="state.showEditorModal"
+    :title="statementTitle"
+    :trap-focus="true"
+    header-class="!border-b-0"
+    container-class="!pt-0 !overflow-hidden"
+  >
+    <div
+      id="modal-editor-container"
+      style="
+        width: calc(100vw - 10rem);
+        height: calc(100vh - 10rem);
+        overflow: hidden;
+        position: relative;
+      "
+      class="border rounded-[3px]"
+    >
+      <MonacoEditor
+        v-if="state.showEditorModal"
+        class="w-full h-full"
+        :filename="filename"
+        :content="state.statement"
+        :language="language"
+        :auto-focus="false"
+        :readonly="isEditorReadonly"
+        :dialect="dialect"
+        :advices="isEditorReadonly ? markers : []"
+        :auto-complete-context="{
+          instance: database.instance,
+          database: database.name,
+        }"
+        @update:content="handleStatementChange"
+      />
+    </div>
+  </BBModal>
 
   <FeatureModal
     :open="state.showFeatureModal"
@@ -157,8 +219,10 @@
 </template>
 
 <script setup lang="ts">
+import { useElementSize } from "@vueuse/core";
 import { cloneDeep } from "lodash-es";
 import Long from "long";
+import { ExpandIcon } from "lucide-vue-next";
 import { NButton, NTooltip, useDialog } from "naive-ui";
 import { computed, h, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
@@ -176,7 +240,8 @@ import {
   notifyNotEditableLegacyIssue,
   isDeploymentConfigChangeTaskV1,
 } from "@/components/IssueV1/logic";
-import MonacoEditor from "@/components/MonacoEditor";
+import { MonacoEditor } from "@/components/MonacoEditor";
+import { extensionNameOfLanguage } from "@/components/MonacoEditor/utils";
 import DownloadSheetButton from "@/components/Sheet/DownloadSheetButton.vue";
 import UploadProgressButton from "@/components/misc/UploadProgressButton.vue";
 import { rolloutServiceClient } from "@/grpcweb";
@@ -205,12 +270,11 @@ import {
 import { readFileAsync } from "@/utils";
 import { useSQLAdviceMarkers } from "../useSQLAdviceMarkers";
 import FormatOnSaveCheckbox from "./FormatOnSaveCheckbox.vue";
-import { useAutoEditorHeight } from "./useAutoEditorHeight";
-import { useEditorAutoCompletion } from "./useEditorAutoCompletion";
 import { EditState, useTempEditState } from "./useTempEditState";
 
 type LocalState = EditState & {
   showFeatureModal: boolean;
+  showEditorModal: boolean;
   isUploadingFile: boolean;
 };
 
@@ -221,28 +285,31 @@ const { events, isCreating, issue, selectedTask, formatOnSave } =
   useIssueContext();
 const project = computed(() => issue.value.projectEntity);
 const dialog = useDialog();
+const editorContainerElRef = ref<HTMLElement>();
+const { height: editorContainerHeight } = useElementSize(editorContainerElRef);
 
 const state = reactive<LocalState>({
   isEditing: false,
   statement: "",
   showFeatureModal: false,
+  showEditorModal: false,
   isUploadingFile: false,
 });
 
-const editorRef = ref<InstanceType<typeof MonacoEditor>>();
-const { updateEditorHeight } = useAutoEditorHeight(editorRef);
-const { updateEditorAutoCompletionContext } =
-  useEditorAutoCompletion(editorRef);
-
-const selectedDatabase = computed(() => {
+const database = computed(() => {
   return databaseForTask(issue.value, selectedTask.value);
 });
 
 const language = useInstanceV1EditorLanguage(
-  computed(() => selectedDatabase.value.instanceEntity)
+  computed(() => database.value.instanceEntity)
 );
+const filename = computed(() => {
+  return `${selectedTask.value.name}.${extensionNameOfLanguage(
+    language.value
+  )}`;
+});
 const dialect = computed((): SQLDialect => {
-  const db = selectedDatabase.value;
+  const db = database.value;
   return dialectOfEngineV1(db.instanceEntity.engine);
 });
 const statementTitle = computed(() => {
@@ -541,7 +608,6 @@ const handleUploadAndOverwrite = async (event: Event) => {
     }
 
     resetTempEditState();
-    updateEditorHeight();
   } finally {
     state.isUploadingFile = false;
   }
@@ -557,7 +623,6 @@ const handleUploadFile = async (event: Event) => {
     }
 
     resetTempEditState();
-    updateEditorHeight();
   } finally {
     state.isUploadingFile = false;
   }
@@ -660,13 +725,6 @@ const handleStatementChange = (value: string) => {
     if (!sheet.value) return;
     setSheetStatement(sheet.value, value);
   }
-
-  updateEditorHeight();
-};
-
-const handleMonacoEditorReady = () => {
-  updateEditorAutoCompletionContext();
-  updateEditorHeight();
 };
 
 watch(
@@ -681,7 +739,6 @@ watch(isCreating, (curr, prev) => {
   // Reset the edit state after creating the issue.
   if (!curr && prev) {
     state.isEditing = false;
-    updateEditorHeight();
   }
 });
 </script>

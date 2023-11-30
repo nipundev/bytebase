@@ -4,7 +4,7 @@
       <div class="divide-block-border space-y-8 w-[25rem] h-full">
         <SearchBox
           v-model:value="state.searchText"
-          style="width: 100%"
+          style="max-width: 100%"
           :placeholder="$t('schema-template.classification.search')"
         />
 
@@ -149,8 +149,10 @@ const renderSuffix = ({ option }: { option: TreeOption }) => {
   if (!node.levelId) {
     return null;
   }
+
   return h(ClassificationLevelBadge, {
-    levelId: node.levelId,
+    showText: false,
+    classification: node.key,
     classificationConfig: props.classificationConfig,
   });
 };

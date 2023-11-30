@@ -21,12 +21,16 @@ service DatabaseService {
   }
 
   rpc ListDatabases(ListDatabasesRequest) returns (ListDatabasesResponse) {
-    option (google.api.http) = {get: "/v1/{parent=instances/*}/databases"};
+    option (google.api.http) = {
+      get: "/v1/{parent=instances/*}/databases"
+      additional_bindings {get: "/v1/{parent=projects/*}/databases"}
+    };
     option (google.api.method_signature) = "";
   }
 
   // Search for databases that the caller has both projects.get permission on, and also satisfy the specified query.
   rpc SearchDatabases(SearchDatabasesRequest) returns (SearchDatabasesResponse) {
+    option deprecated = true;
     option (google.api.http) = {get: "/v1/{parent=instances/*}/databases:search"};
     option (google.api.method_signature) = "";
   }
@@ -143,8 +147,8 @@ message GetDatabaseRequest {
 
 message ListDatabasesRequest {
   // The parent, which owns this collection of databases.
-  // Format: instances/{instance}
-  // Use "instances/-" to list all databases.
+  // - instances/{instance}: list all databases for an instance. Use "instances/-" to list all databases.
+  // - projects/{project}: list all databases in a project.
   string parent = 1 [(google.api.field_behavior) = REQUIRED];
 
   // The maximum number of databases to return. The service may return fewer than
@@ -162,6 +166,7 @@ message ListDatabasesRequest {
 
   // Filter is used to filter databases returned in the list.
   // For example, "project = projects/{project}" can be used to list databases in a project.
+  // Note: the project filter will be moved to parent.
   string filter = 4;
 }
 

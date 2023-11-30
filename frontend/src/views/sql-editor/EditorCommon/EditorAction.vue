@@ -6,23 +6,30 @@
     <div
       class="action-left gap-x-2 flex overflow-x-auto sm:overflow-x-hidden items-center"
     >
-      <NButton
-        type="primary"
-        size="small"
-        :disabled="!allowQuery"
-        @click="handleRunQuery"
-      >
-        <mdi:play class="-ml-1.5" />
-        <span>
-          {{
-            showRunSelected ? $t("sql-editor.run-selected") : $t("common.run")
-          }}
-        </span>
+      <NButtonGroup>
+        <NButton
+          type="primary"
+          size="small"
+          :disabled="!allowQuery"
+          @click="handleRunQuery"
+        >
+          <template #icon>
+            <mdi:play class="-ml-1.5" />
+          </template>
+          <span>
+            {{
+              showRunSelected ? $t("sql-editor.run-selected") : $t("common.run")
+            }}
+          </span>
 
-        <span v-show="showShortcutText" class="ml-1">
-          ({{ keyboardShortcutStr("cmd_or_ctrl+⏎") }})
-        </span>
-      </NButton>
+          <span v-show="showShortcutText" class="ml-1">
+            ({{ keyboardShortcutStr("cmd_or_ctrl+⏎") }})
+          </span>
+        </NButton>
+        <QueryContextSettingPopover
+          v-if="showQueryContextSettingPopover && allowQuery"
+        />
+      </NButtonGroup>
       <NButton size="small" :disabled="!allowQuery" @click="handleExplainQuery">
         <mdi:play class="-ml-1.5" />
         <span>Explain</span>
@@ -69,6 +76,7 @@
           </span>
         </NButton>
         <NPopover
+          v-if="!isStandaloneMode"
           trigger="click"
           placement="bottom-end"
           :show-arrow="false"
@@ -108,7 +116,7 @@
 
 <script lang="ts" setup>
 import { useElementSize } from "@vueuse/core";
-import { NButton, NPopover } from "naive-ui";
+import { NButtonGroup, NButton, NPopover } from "naive-ui";
 import { computed, defineEmits, reactive, ref } from "vue";
 import {
   useTabStore,
@@ -117,12 +125,15 @@ import {
   featureToRef,
   useInstanceV1ByUID,
   useWebTerminalV1Store,
+  usePageMode,
 } from "@/store";
 import type { ExecuteConfig, ExecuteOption, FeatureType } from "@/types";
 import { TabMode, UNKNOWN_ID } from "@/types";
 import { formatEngineV1, keyboardShortcutStr } from "@/utils";
+import { customTheme } from "@/utils/customTheme";
 import { useSQLEditorContext } from "../context";
 import AdminModeButton from "./AdminModeButton.vue";
+import QueryContextSettingPopover from "./QueryContextSettingPopover.vue";
 import SharePopover from "./SharePopover.vue";
 
 interface LocalState {
@@ -148,6 +159,9 @@ const { events } = useSQLEditorContext();
 const containerRef = ref<HTMLDivElement>();
 const { width: containerWidth } = useElementSize(containerRef);
 const hasSharedSQLScriptFeature = featureToRef("bb.feature.shared-sql-script");
+const pageMode = usePageMode();
+
+const isStandaloneMode = computed(() => pageMode.value === "STANDALONE");
 
 const connection = computed(() => tabStore.currentTab.connection);
 
@@ -210,6 +224,14 @@ const queryList = computed(() => {
   return (
     webTerminalStore.getQueryStateByTab(tabStore.currentTab).queryItemList
       .value || []
+  );
+});
+
+const showQueryContextSettingPopover = computed(() => {
+  return (
+    Boolean(selectedInstance.value) &&
+    tabStore.currentTab.mode !== TabMode.Admin &&
+    customTheme.value === "lixiang"
   );
 });
 

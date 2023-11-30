@@ -1,14 +1,18 @@
 <template>
   <NModal
-    :show="true"
+    :show="show"
     :auto-focus="false"
     :trap-focus="trapFocus"
-    :close-on-esc="escClosable"
+    :close-on-esc="false"
     :mask-closeable="maskClosable"
-    @esc="escClosable && tryClose()"
-    @mask-click="maskClosable && tryClose()"
+    @mask-click="maskClosable && upmost && tryClose()"
   >
-    <div v-bind="$attrs" class="bb-modal">
+    <div
+      v-bind="$attrs"
+      class="bb-modal"
+      :data-overlay-stack-id="id"
+      :data-overlay-stack-upmost="upmost"
+    >
       <div class="modal-header" :class="headerClass">
         <div class="text-xl text-main mr-2 flex-1 overflow-hidden">
           <slot name="title"><component :is="renderTitle" /></slot>
@@ -18,7 +22,7 @@
           v-if="showClose"
           class="text-control-light"
           aria-label="close"
-          @click.prevent="tryClose"
+          @click.prevent="tryClose()"
         >
           <span class="sr-only">Close</span>
           <!-- Heroicons name: x -->
@@ -35,29 +39,10 @@
 
 <script lang="ts">
 import { NModal } from "naive-ui";
-import {
-  defineComponent,
-  h,
-  inject,
-  onBeforeMount,
-  onMounted,
-  onUnmounted,
-  PropType,
-  provide,
-  ref,
-  Ref,
-  RenderFunction,
-} from "vue";
+import { defineComponent, h, PropType, RenderFunction } from "vue";
+import { useOverlayStack } from "@/components/misc/OverlayStackManager.vue";
+import { useEmitteryEventListener } from "@/composables/useEmitteryEventListener";
 import type { VueClass } from "@/utils";
-
-type Overrides = {
-  title: string | RenderFunction | undefined;
-  subtitle: string | RenderFunction | undefined;
-};
-type BBModalContext = {
-  overrides: Ref<Overrides>;
-};
-const BB_MODAL_CONTEXT = "bb.modal.context";
 
 export default defineComponent({
   name: "BBModalV2",
@@ -66,13 +51,17 @@ export default defineComponent({
   },
   inheritAttrs: false,
   props: {
+    show: {
+      type: Boolean,
+      default: true,
+    },
     title: {
       default: "",
-      type: String,
+      type: [String, Function] as PropType<string | RenderFunction>,
     },
     subtitle: {
       default: "",
-      type: String,
+      type: [String, Function] as PropType<string | RenderFunction>,
     },
     showClose: {
       type: Boolean,
@@ -86,7 +75,7 @@ export default defineComponent({
       type: [String, Object, Array] as PropType<VueClass>,
       default: undefined,
     },
-    escClosable: {
+    closeOnEsc: {
       type: Boolean,
       default: true,
     },
@@ -104,11 +93,14 @@ export default defineComponent({
       default: undefined,
     },
   },
-  emits: ["close"],
+  emits: ["close", "update:show"],
   setup(props, { emit }) {
-    const overrides = ref<Overrides>({
-      title: undefined,
-      subtitle: undefined,
+    const { id, upmost, events } = useOverlayStack();
+
+    useEmitteryEventListener(events, "esc", (e) => {
+      if (upmost.value && props.closeOnEsc) {
+        tryClose();
+      }
     });
 
     const tryClose = async () => {
@@ -118,28 +110,19 @@ export default defineComponent({
         if (!pass) return;
       }
       emit("close");
+      emit("update:show", false);
     };
 
-    provide<BBModalContext>(BB_MODAL_CONTEXT, {
-      overrides,
-    });
-
     const renderTitle = () => {
-      if (typeof overrides.value.title === "function") {
-        return overrides.value.title();
-      }
-      if (typeof overrides.value.title === "string") {
-        return overrides.value.title;
+      if (typeof props.title === "function") {
+        return props.title();
       }
       return props.title;
     };
 
     const renderSubtitle = () => {
-      if (typeof overrides.value.subtitle === "function") {
-        return overrides.value.subtitle();
-      }
-      if (typeof overrides.value.subtitle === "string") {
-        return overrides.value.subtitle;
+      if (typeof props.subtitle === "function") {
+        return props.subtitle();
       }
       if (props.subtitle) {
         return h(
@@ -157,47 +140,11 @@ export default defineComponent({
       tryClose,
       renderTitle,
       renderSubtitle,
+      id,
+      upmost,
     };
   },
 });
-
-const useBBModalContext = () => inject<BBModalContext>(BB_MODAL_CONTEXT);
-
-export const useOverrideTitle = (
-  title: string | RenderFunction | undefined
-) => {
-  const context = useBBModalContext();
-  let originalTitle: string | RenderFunction | undefined = undefined;
-  onBeforeMount(() => {
-    if (context) {
-      originalTitle = context.overrides.value.title;
-      context.overrides.value.title = title;
-    }
-  });
-  onUnmounted(() => {
-    if (context) {
-      context.overrides.value.title = originalTitle;
-    }
-  });
-};
-
-export const useOverrideSubtitle = (
-  subtitle: string | RenderFunction | undefined
-) => {
-  const context = useBBModalContext();
-  let originalSubtitle: string | RenderFunction | undefined = undefined;
-  onMounted(() => {
-    if (context) {
-      originalSubtitle = context.overrides.value.subtitle;
-      context.overrides.value.subtitle = subtitle;
-    }
-  });
-  onUnmounted(() => {
-    if (context) {
-      context.overrides.value.subtitle = originalSubtitle;
-    }
-  });
-};
 </script>
 
 <style scoped lang="postcss">

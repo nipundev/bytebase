@@ -52,36 +52,39 @@
           </NTab>
         </NTabs>
 
-        <DiffEditor
-          v-if="state.tab === 'DIFF'"
-          class="h-[64rem] max-h-full border rounded-md overflow-clip"
-          :original="sdlState.detail.previousSDL"
-          :value="sdlState.detail.prettyExpectedSDL"
-          :readonly="true"
-        />
-        <MonacoEditor
-          v-if="state.tab === 'STATEMENT'"
-          ref="editorRef"
-          class="w-full border h-auto max-h-[360px]"
-          data-label="bb-issue-sql-editor"
-          :value="sdlState.detail.diffDDL"
-          :readonly="true"
-          :auto-focus="false"
-          language="sql"
-          @ready="handleMonacoEditorReady"
-        />
-        <MonacoEditor
-          v-if="state.tab === 'SCHEMA'"
-          ref="editorRef"
-          class="w-full border h-auto max-h-[360px]"
-          data-label="bb-issue-sql-editor"
-          :value="sdlState.detail.expectedSDL"
-          :readonly="true"
-          :auto-focus="false"
-          :advices="markers"
-          language="sql"
-          @ready="handleMonacoEditorReady"
-        />
+        <div class="relative min-h-[6rem]">
+          <DiffEditor
+            v-if="state.tab === 'DIFF'"
+            class="border rounded-[3px] overflow-clip"
+            :original="sdlState.detail.previousSDL"
+            :modified="sdlState.detail.prettyExpectedSDL"
+            :readonly="true"
+            :auto-height="{
+              alignment: 'modified',
+              min: 120,
+              max: 480,
+            }"
+          />
+          <MonacoEditor
+            v-if="state.tab === 'STATEMENT'"
+            class="w-full h-auto border rounded-[3px] overflow-clip"
+            data-label="bb-issue-sql-editor"
+            :content="sdlState.detail.diffDDL"
+            :readonly="true"
+            :auto-focus="false"
+            :auto-height="{ min: 120, max: 360 }"
+          />
+          <MonacoEditor
+            v-if="state.tab === 'SCHEMA'"
+            class="w-full h-auto border rounded-[3px] overflow-clip"
+            data-label="bb-issue-sql-editor"
+            :content="sdlState.detail.expectedSDL"
+            :readonly="true"
+            :auto-focus="false"
+            :auto-height="{ min: 120, max: 360 }"
+            :advices="markers"
+          />
+        </div>
       </template>
     </div>
   </div>
@@ -94,10 +97,9 @@
 
 <script lang="ts" setup>
 import { NTabs, NTab, NTooltip } from "naive-ui";
-import { reactive, ref } from "vue";
+import { reactive } from "vue";
 import LearnMoreLink from "@/components/LearnMoreLink.vue";
-import MonacoEditor from "@/components/MonacoEditor";
-import DiffEditor from "@/components/MonacoEditor/DiffEditor.vue";
+import { DiffEditor, MonacoEditor } from "@/components/MonacoEditor";
 import { hasFeature, pushNotification } from "@/store";
 import { useSQLAdviceMarkers } from "../useSQLAdviceMarkers";
 import { useSDLState } from "./useSDLState";
@@ -113,19 +115,8 @@ const state = reactive<LocalState>({
   showFeatureModal: false,
   tab: "DIFF",
 });
-const editorRef = ref<InstanceType<typeof MonacoEditor>>();
 
 const { state: sdlState, events: sdlEvents } = useSDLState();
-
-const updateEditorHeight = () => {
-  const contentHeight =
-    editorRef.value?.editorInstance?.getContentHeight() as number;
-  editorRef.value?.setEditorContentHeight(contentHeight);
-};
-
-const handleMonacoEditorReady = () => {
-  updateEditorHeight();
-};
 
 const { markers } = useSQLAdviceMarkers();
 

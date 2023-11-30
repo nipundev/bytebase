@@ -25,7 +25,6 @@ import {
 } from "./store";
 import {
   databaseSlug,
-  dataSourceSlug,
   environmentName,
   environmentSlug,
   humanizeTs,
@@ -155,7 +154,6 @@ app.config.globalProperties.projectSlug = projectSlug;
 app.config.globalProperties.instanceName = instanceName;
 app.config.globalProperties.instanceSlug = instanceSlug;
 app.config.globalProperties.databaseSlug = databaseSlug;
-app.config.globalProperties.dataSourceSlug = dataSourceSlug;
 app.config.globalProperties.connectionSlug = connectionSlug;
 
 app
@@ -183,24 +181,25 @@ const initActuator = async () => {
 
   actuatorStore.fetchServerInfo();
 };
-const initSubscription = () => {
-  const subscriptionStore = useSubscriptionV1Store();
-  return subscriptionStore.fetchSubscription();
+const initSubscription = async () => {
+  await useSubscriptionV1Store().fetchSubscription();
 };
-const initFeatureMatrix = () => {
-  const subscriptionStore = useSubscriptionV1Store();
-  return subscriptionStore.fetchFeatureMatrix();
+const initFeatureMatrix = async () => {
+  await useSubscriptionV1Store().fetchFeatureMatrix();
 };
-const restoreUser = () => {
-  const authStore = useAuthStore();
-  return authStore.restoreUser();
+const restoreUser = async () => {
+  await useAuthStore().restoreUser();
 };
-Promise.all([
-  initActuator(),
-  initFeatureMatrix(),
-  initSubscription(),
-  restoreUser(),
-]).finally(() => {
+const initBasicModules = async () => {
+  await Promise.all([
+    initActuator(),
+    initFeatureMatrix(),
+    initSubscription(),
+    restoreUser(),
+  ]);
+};
+
+initBasicModules().finally(() => {
   // Install router after the necessary data fetching is complete.
   app.use(router).use(highlight).use(i18n).use(NaiveUI);
   app.mount("#app");

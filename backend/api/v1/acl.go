@@ -12,6 +12,8 @@ import (
 
 	"github.com/bytebase/bytebase/backend/api/auth"
 	"github.com/bytebase/bytebase/backend/common"
+	"github.com/bytebase/bytebase/backend/component/config"
+	"github.com/bytebase/bytebase/backend/component/iam"
 	enterprise "github.com/bytebase/bytebase/backend/enterprise/api"
 	api "github.com/bytebase/bytebase/backend/legacyapi"
 	"github.com/bytebase/bytebase/backend/store"
@@ -23,16 +25,18 @@ type ACLInterceptor struct {
 	store          *store.Store
 	secret         string
 	licenseService enterprise.LicenseService
-	mode           common.ReleaseMode
+	iamManager     *iam.Manager
+	profile        *config.Profile
 }
 
 // NewACLInterceptor returns a new v1 API ACL interceptor.
-func NewACLInterceptor(store *store.Store, secret string, licenseService enterprise.LicenseService, mode common.ReleaseMode) *ACLInterceptor {
+func NewACLInterceptor(store *store.Store, secret string, licenseService enterprise.LicenseService, iamManager *iam.Manager, profile *config.Profile) *ACLInterceptor {
 	return &ACLInterceptor{
 		store:          store,
 		secret:         secret,
 		licenseService: licenseService,
-		mode:           mode,
+		iamManager:     iamManager,
+		profile:        profile,
 	}
 }
 
@@ -45,6 +49,7 @@ func (in *ACLInterceptor) ACLInterceptor(ctx context.Context, request any, serve
 	if user != nil {
 		// Store workspace role into context.
 		ctx = context.WithValue(ctx, common.RoleContextKey, user.Role)
+		ctx = context.WithValue(ctx, common.UserContextKey, user)
 	}
 
 	if auth.IsAuthenticationAllowed(serverInfo.FullMethod) {
@@ -75,6 +80,7 @@ func (in *ACLInterceptor) ACLStreamInterceptor(request any, ss grpc.ServerStream
 	if user != nil {
 		// Store workspace role into context.
 		ctx = context.WithValue(ctx, common.RoleContextKey, user.Role)
+		ctx = context.WithValue(ctx, common.UserContextKey, user)
 		ss = overrideStream{ServerStream: ss, childCtx: ctx}
 	}
 
@@ -105,12 +111,11 @@ func (s overrideStream) Context() context.Context {
 }
 
 func (in *ACLInterceptor) aclInterceptorDo(ctx context.Context, fullMethod string, request any, user *store.UserMessage) error {
-	methodName := getShortMethodName(fullMethod)
-	if isOwnerAndDBAMethod(methodName) {
-		return status.Errorf(codes.PermissionDenied, "only workspace owner and DBA can access method %q", methodName)
+	if isOwnerAndDBAMethod(fullMethod) {
+		return status.Errorf(codes.PermissionDenied, "only workspace owner and DBA can access method %q", fullMethod)
 	}
 
-	if isProjectOwnerMethod(methodName) {
+	if isProjectOwnerMethod(fullMethod) {
 		projectIDs, err := getProjectIDs(request)
 		if err != nil {
 			return status.Errorf(codes.PermissionDenied, err.Error())
@@ -121,12 +126,12 @@ func (in *ACLInterceptor) aclInterceptorDo(ctx context.Context, fullMethod strin
 				return status.Errorf(codes.PermissionDenied, err.Error())
 			}
 			if !projectRoles[api.Owner] {
-				return status.Errorf(codes.PermissionDenied, "only the owner of project %q can access method %q", projectID, methodName)
+				return status.Errorf(codes.PermissionDenied, "only the owner of project %q can access method %q", projectID, fullMethod)
 			}
 		}
 	}
 
-	if isTransferDatabaseMethods(methodName) {
+	if isTransferDatabaseMethods(fullMethod) {
 		projectIDs, err := in.getTransferDatabaseToProjects(ctx, request)
 		if err != nil {
 			return status.Errorf(codes.PermissionDenied, err.Error())
@@ -141,6 +146,11 @@ func (in *ACLInterceptor) aclInterceptorDo(ctx context.Context, fullMethod strin
 			}
 		}
 	}
+
+	if in.profile.DevelopmentIAM {
+		return in.checkIAMPermission(ctx, fullMethod, request, user)
+	}
+
 	return nil
 }
 

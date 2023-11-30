@@ -1,24 +1,33 @@
 <template>
   <NSelect
+    :filterable="true"
+    :virtual-scroll="true"
     :multiple="multiple"
     :value="value"
     :options="options"
-    :filterable="true"
-    :filter="filterByTitle"
-    :virtual-scroll="true"
-    :render-label="renderLabel"
+    :show="showStatus"
     :fallback-option="fallbackOption"
+    :filter="filterByTitle"
+    :render-label="renderLabel"
     :placeholder="$t('principal.select')"
     class="bb-user-select"
     style="width: 12rem"
+    @update:show="(show: boolean)=>{
+      if (show) showStatus = true
+    }"
     @update:value="handleValueUpdated"
   />
 </template>
 
 <script lang="ts" setup>
 import { intersection } from "lodash-es";
-import { NSelect, SelectOption, SelectProps } from "naive-ui";
-import { computed, watch, watchEffect, h } from "vue";
+import {
+  NSelect,
+  SelectGroupOption,
+  SelectOption,
+  SelectProps,
+} from "naive-ui";
+import { computed, watch, watchEffect, h, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import UserIcon from "~icons/heroicons-outline/user";
 import UserAvatar from "@/components/User/UserAvatar.vue";
@@ -35,7 +44,7 @@ import { User, UserRole, UserType } from "@/types/proto/v1/auth_service";
 import { State } from "@/types/proto/v1/common";
 import { extractUserUID, memberListInProjectV1 } from "@/utils";
 
-interface UserSelectOption extends SelectOption {
+export interface UserSelectOption extends SelectOption {
   value: string;
   user: User;
 }
@@ -56,6 +65,7 @@ const props = withDefaults(
     allowedProjectMemberRoleList?: string[];
     autoReset?: boolean;
     filter?: (user: User, index: number) => boolean;
+    mapOptions?: (users: User[]) => (UserSelectOption | SelectGroupOption)[];
     fallbackOption?: SelectProps["fallbackOption"];
   }>(),
   {
@@ -79,6 +89,7 @@ const props = withDefaults(
     ],
     autoReset: true,
     filter: undefined,
+    mapOptions: undefined,
     fallbackOption: false,
   }
 );
@@ -91,6 +102,7 @@ const emit = defineEmits<{
 const { t } = useI18n();
 const projectV1Store = useProjectV1Store();
 const userStore = useUserStore();
+const showStatus = ref(false);
 
 const value = computed(() => {
   if (props.multiple) {
@@ -207,6 +219,7 @@ const combinedUserList = computed(() => {
 });
 
 const handleValueUpdated = (value: string | string[]) => {
+  showStatus.value = false;
   if (props.multiple) {
     emit("update:users", value as string[]);
   } else {
@@ -236,6 +249,9 @@ const renderAvatar = (user: User) => {
 };
 
 const renderLabel = (option: SelectOption) => {
+  if (option.type === "group") {
+    return option.label;
+  }
   const { user } = option as UserSelectOption;
   const avatar = renderAvatar(user);
   const title =
@@ -265,6 +281,9 @@ const renderLabel = (option: SelectOption) => {
 };
 
 const options = computed(() => {
+  if (props.mapOptions) {
+    return props.mapOptions(combinedUserList.value);
+  }
   return combinedUserList.value.map<UserSelectOption>((user) => {
     return {
       user,

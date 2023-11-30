@@ -1,12 +1,16 @@
 <template>
-  <div class="px-4 py-6 lg:flex">
+  <div class="py-6 lg:flex">
     <div class="text-left lg:w-1/4">
-      <h1 class="text-2xl font-bold">
-        {{ $t("settings.general.workspace.announcement.self") }}
-      </h1>
+      <div class="flex items-center space-x-2">
+        <h1 class="text-2xl font-bold">
+          {{ $t("settings.general.workspace.announcement.self") }}
+        </h1>
+        <FeatureBadge feature="bb.feature.announcement" />
+      </div>
+
       <span v-if="!allowEdit" class="text-sm text-gray-400">
         {{
-          $t("settings.general.workspace.announcement.owner-or-dba-can-edit")
+          $t("settings.general.workspace.announcement.admin-or-dba-can-edit")
         }}
       </span>
     </div>
@@ -21,14 +25,13 @@
               "settings.general.workspace.announcement-alert-level.description"
             )
           }}</span>
-          <FeatureBadge feature="bb.feature.announcement" />
           <span
             v-if="!allowEdit"
             class="text-sm text-gray-400 -translate-y-2 tooltip"
           >
             {{
               $t(
-                "settings.general.workspace.announcement.owner-or-dba-can-edit"
+                "settings.general.workspace.announcement.admin-or-dba-can-edit"
               )
             }}
           </span>
@@ -48,15 +51,13 @@
             >{{ $t("settings.general.workspace.announcement-text.self") }}
           </span>
 
-          <FeatureBadge feature="bb.feature.announcement" />
-
           <span
             v-if="!allowEdit"
             class="text-sm text-gray-400 -translate-y-2 tooltip"
           >
             {{
               $t(
-                "settings.general.workspace.announcement.owner-or-dba-can-edit"
+                "settings.general.workspace.announcement.admin-or-dba-can-edit"
               )
             }}
           </span>
@@ -64,14 +65,13 @@
         <div class="mb-3 text-sm text-gray-400">
           {{ $t("settings.general.workspace.announcement-text.description") }}
         </div>
-        <BBTextField
+        <NInput
+          v-model:value="state.announcement.text"
           class="mb-3 w-full"
           :placeholder="
             $t('settings.general.workspace.announcement-text.placeholder')
           "
           :disabled="!allowEdit"
-          :value="state.announcement.text"
-          @input="handleAnnouncementContentChange"
         />
 
         <label
@@ -82,36 +82,32 @@
             $t("settings.general.workspace.extra-link.self")
           }}</span>
 
-          <FeatureBadge feature="bb.feature.announcement" />
-
           <span
             v-if="!allowEdit"
             class="text-sm text-gray-400 -translate-y-2 tooltip"
           >
             {{
               $t(
-                "settings.general.workspace.announcement.owner-or-dba-can-edit"
+                "settings.general.workspace.announcement.admin-or-dba-can-edit"
               )
             }}
           </span>
         </label>
-        <BBTextField
+        <NInput
+          v-model:value="state.announcement.link"
           class="mb-5 w-full"
           :placeholder="$t('settings.general.workspace.extra-link.placeholder')"
           :disabled="!allowEdit"
-          :value="state.announcement.link"
-          @input="handleExtraDetailsChange"
         />
 
-        <div class="flex">
-          <button
-            type="button"
-            class="btn-primary ml-auto"
+        <div class="flex justify-end">
+          <NButton
+            type="primary"
             :disabled="!allowSave"
             @click.prevent="updateAnnouncementSetting"
           >
             {{ $t("common.update") }}
-          </button>
+          </NButton>
         </div>
       </div>
     </div>
@@ -191,14 +187,6 @@ const allowSave = computed((): boolean => {
     state.announcement
   );
 });
-
-const handleAnnouncementContentChange = (event: Event) => {
-  state.announcement.text = (event.target as HTMLInputElement).value;
-};
-
-const handleExtraDetailsChange = (event: Event) => {
-  state.announcement.link = (event.target as HTMLInputElement).value;
-};
 
 const updateAnnouncementSetting = async () => {
   if (!hasAnnouncementSetting.value) {

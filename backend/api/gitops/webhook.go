@@ -1640,7 +1640,7 @@ func (s *Service) createIssueFromMigrationDetailsV2(ctx context.Context, project
 				Config: &v1pb.Plan_Spec_ChangeDatabaseConfig{
 					ChangeDatabaseConfig: &v1pb.Plan_ChangeDatabaseConfig{
 						Type:          getChangeType(migrationDetail.migrationType),
-						Target:        fmt.Sprintf("instances/%s/databases/%s", database.InstanceID, database.DatabaseName),
+						Target:        common.FormatDatabase(database.InstanceID, database.DatabaseName),
 						Sheet:         fmt.Sprintf("projects/%s/sheets/%d", project.ResourceID, migrationDetail.sheetID),
 						SchemaVersion: migrationDetail.schemaVersion.Version,
 					},
@@ -1911,7 +1911,7 @@ func (s *Service) prepareIssueFromSDLFile(ctx context.Context, oauthContext *com
 	sheet, err := s.store.CreateSheet(ctx, &store.SheetMessage{
 		CreatorID:  api.SystemBotID,
 		ProjectUID: repoInfo.project.UID,
-		Name:       file,
+		Title:      file,
 		Statement:  sdl,
 		Visibility: store.ProjectSheet,
 		Source:     store.SheetFromBytebaseArtifact,
@@ -1984,7 +1984,7 @@ func (s *Service) prepareIssueFromFile(
 			sheet, err := s.store.CreateSheet(ctx, &store.SheetMessage{
 				CreatorID:  api.SystemBotID,
 				ProjectUID: repoInfo.project.UID,
-				Name:       fileInfo.item.FileName,
+				Title:      fileInfo.item.FileName,
 				Statement:  content,
 				Visibility: store.ProjectSheet,
 				Source:     store.SheetFromBytebaseArtifact,
@@ -2021,7 +2021,7 @@ func (s *Service) prepareIssueFromFile(
 		sheet, err := s.store.CreateSheet(ctx, &store.SheetMessage{
 			CreatorID:  api.SystemBotID,
 			ProjectUID: repoInfo.project.UID,
-			Name:       fileInfo.item.FileName,
+			Title:      fileInfo.item.FileName,
 			Statement:  migrationFile.Statement,
 			Visibility: store.ProjectSheet,
 			Source:     store.SheetFromBytebaseArtifact,
@@ -2072,7 +2072,7 @@ func (s *Service) prepareIssueFromFile(
 		sheet, err := s.store.CreateSheet(ctx, &store.SheetMessage{
 			CreatorID:  api.SystemBotID,
 			ProjectUID: repoInfo.project.UID,
-			Name:       fileInfo.item.FileName,
+			Title:      fileInfo.item.FileName,
 			Statement:  content,
 			Visibility: store.ProjectSheet,
 			Source:     store.SheetFromBytebaseArtifact,
@@ -2150,7 +2150,7 @@ func (s *Service) tryUpdateTasksFromModifiedFile(ctx context.Context, databases 
 		sheet, err := s.store.CreateSheet(ctx, &store.SheetMessage{
 			CreatorID:  api.SystemBotID,
 			ProjectUID: issue.Project.UID,
-			Name:       fileName,
+			Title:      fileName,
 			Statement:  statement,
 			Visibility: store.ProjectSheet,
 			Source:     store.SheetFromBytebaseArtifact,
@@ -2184,7 +2184,7 @@ func (s *Service) tryUpdateTasksFromModifiedFile(ctx context.Context, databases 
 					if !ok {
 						continue
 					}
-					if v.ChangeDatabaseConfig.SchemaVersion == schemaVersion && v.ChangeDatabaseConfig.Target == fmt.Sprintf("instances/%s/databases/%s", database.InstanceID, database.DatabaseName) {
+					if v.ChangeDatabaseConfig.SchemaVersion == schemaVersion && v.ChangeDatabaseConfig.Target == common.FormatDatabase(database.InstanceID, database.DatabaseName) {
 						v.ChangeDatabaseConfig.Sheet = fmt.Sprintf("projects/%s/sheets/%d", issue.Project.ResourceID, sheet.UID)
 					}
 				}
